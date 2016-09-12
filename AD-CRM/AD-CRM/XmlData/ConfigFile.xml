@@ -1,0 +1,8 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<settings>
+  <activedirectory ldap="LDAP://example.com" username="username" password="password" />
+  <organizations>
+    <organization name="CRMAppr" url="http://crm" org="xrmappr" username="username" password="password" adgroup="ComData2" />
+    <organization name="CRMProd" url="http://crm" org="xrm" username="username" password="password" adgroup="A24-Member" />
+  </organizations>
+</settings>

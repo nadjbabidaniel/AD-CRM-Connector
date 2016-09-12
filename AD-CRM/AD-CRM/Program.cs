@@ -1,35 +1,64 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.DirectoryServices;
+using System.DirectoryServices.Protocols;
+using System.Linq;
+using System.Net;
+using System.Text;
+using System.Threading.Tasks;
+using System.Xml;
 
 namespace AD_CRM
 {
-  internal class Program
-  {
-    private static void Main (string[] args)
+    class Program
     {
-      DirectoryEntry directoryEntry;
+        static void Main(string[] args)
+        {
+            //DirectoryEntry directoryEntry = new DirectoryEntry("LDAP://93.184.191.103/xRMServer03.a24xrmdomain.info", @"A24XRMDOMAIN\Danijel.Nadjbabi", "Por4Xae3", AuthenticationTypes.Secure);
 
-      String ldapPath = "LDAP://XRMSERVER02.a24xrmdomain.info";
+            XmlDocument doc = new XmlDocument();
+            string Xml_Path = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            Xml_Path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Xml_Path), "XmlData\\" + "ConfigFile.xml");
+            doc.Load(Xml_Path);
 
-      directoryEntry = new DirectoryEntry (ldapPath, @"A24XRMDOMAIN\Andrea.Borbelj"
-      , "Nue5Gbe9");
+            XmlNodeList xnList = doc.SelectNodes("/settings/organizations/organization/@adgroup");
+            foreach (XmlNode item in xnList)
+            {
+                Console.WriteLine(item.Value);
+            }
 
-      //// Search AD to see if the user already exists.
-      DirectorySearcher search = new DirectorySearcher (directoryEntry);
-      //search.SearchScope = SearchScope.Subtree;
-      search.Filter = "(&(objectClass=user))";
+            try
+            {
+                DirectoryEntry directoryEntry;
 
-      search.Filter = String.Format ("(sAMAccountName={0})", "Gast");
-      search.PropertiesToLoad.Add ("samaccountname");
-      search.PropertiesToLoad.Add ("memberOf");
-      SearchResult result = search.FindOne ();
+                String ldapPath = "LDAP://XRMSERVER02.a24xrmdomain.info";
 
-      if (result != null)
-      {
-        // Use the existing AD account.
-        DirectoryEntry userADAccount = result.GetDirectoryEntry ();
-        Console.WriteLine (userADAccount.Properties["memberOf"].Value);
-      }
+                directoryEntry = new DirectoryEntry(ldapPath, @"A24XRMDOMAIN\Danijel.Nadjbabi", "Por4Xae3");
+
+                //// Search AD to see if the user already exists.
+                DirectorySearcher search = new DirectorySearcher(directoryEntry);
+                search.Filter = "(&(objectClass=user))";
+
+                search.Filter = String.Format("(sAMAccountName={0})", "Gast");
+                search.PropertiesToLoad.Add("samaccountname");
+                search.PropertiesToLoad.Add("memberOf");
+                SearchResult result = search.FindOne();
+
+                if (result != null)
+                {
+                    // Use the existing AD account.
+                    DirectoryEntry userADAccount = result.GetDirectoryEntry();
+                    Console.WriteLine(userADAccount.Properties["memberOf"].Value);
+                    Console.ReadKey();
+                }              
+            
+            }
+            catch (Exception e)
+            {
+                System.Diagnostics.Debug.WriteLine(e.Message);
+                Console.WriteLine(e.Message);
+                Console.ReadKey();
+            }
+        }
     }
-  }
 }

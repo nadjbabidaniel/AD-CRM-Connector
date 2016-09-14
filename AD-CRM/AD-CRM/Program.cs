@@ -13,6 +13,9 @@ namespace AD_CRM
 {
     class Program
     {
+
+        private static List<String> allUsersListDistinguishedName = new List<String>();
+
         static void Main(string[] args)
         {
             //DirectoryEntry directoryEntry = new DirectoryEntry("LDAP://93.184.191.103/xRMServer03.a24xrmdomain.info", @"A24XRMDOMAIN\Danijel.Nadjbabi", "Por4Xae3", AuthenticationTypes.Secure);
@@ -64,31 +67,33 @@ namespace AD_CRM
                 //}
 
 
-                ////////////////SearchResultCollection results = search.FindAll();
-                ////////////////for (int i = 0; i < results.Count; i++)
-                ////////////////{
-                ////////////////    DirectoryEntry de = results[i].GetDirectoryEntry();
+                SearchResultCollection results = search.FindAll();
+                for (int i = 0; i < results.Count; i++)
+                {
+                    DirectoryEntry de = results[i].GetDirectoryEntry();
 
-                ////////////////    var members = (IEnumerable)de.Invoke("members");// Invoke("members");
+                    var members = (IEnumerable)de.Invoke("members");// Invoke("members");
 
-                ////////////////    foreach (object member in members)
-                ////////////////    {
-                ////////////////        DirectoryEntry user = new DirectoryEntry(member);
-                ////////////////        allUsersList.Add(user);
+                    foreach (object member in members)
+                    {
+                        DirectoryEntry user = new DirectoryEntry(member);
+                        allUsersList.Add(user);
 
+                        int flags = (int)user.Properties["userAccountControl"].Value;
+                        var active = !Convert.ToBoolean(flags & 0x0002);
 
-                ////////////////        int flags = (int)user.Properties["userAccountControl"].Value;
+                        var distinguishedName = (string)user.Properties["distinguishedName"].Value;
+                        allUsersListDistinguishedName.Add(distinguishedName);
 
-                ////////////////        var active = !Convert.ToBoolean(flags & 0x0002);
+                        Console.WriteLine(user.Path);
+                        Console.WriteLine("DistinguishedName:" + distinguishedName);
+                        Console.WriteLine(active);
+                        Console.WriteLine(flags);
+                    }
 
-                ////////////////        Console.WriteLine(user.Name);
-                ////////////////        Console.WriteLine(active);
-                ////////////////        Console.WriteLine(flags);
-                ////////////////    }
-
-                ////////////////    Console.WriteLine(de.Name + "-----------------------------");
-                ////////////////}
-                ////////////////Console.ReadKey();
+                    Console.WriteLine(de.Name + "-----------------------------");
+                }
+                //Console.ReadKey();
 
 
                 String ldapPath2 = "XRMSERVER02.a24xrmdomain.info";
@@ -114,16 +119,15 @@ namespace AD_CRM
                     using (ChangeNotifier notifier = new ChangeNotifier(connection))
                     {
                     //register some objects for notifications (limit 5)
-                    //notifier.Register("dc=a24xrmdomain,dc=info", System.DirectoryServices.Protocols.SearchScope.OneLevel);
-                    notifier.Register("cn=Danije Nadjbabi | ComData,ou=ComData, ou=Extern,ou=A24-UsersAndGroups,dc=a24xrmdomain,dc=info", System.DirectoryServices.Protocols.SearchScope.Base);
-
-                        notifier.ObjectChanged += new EventHandler<ObjectChangedEventArgs>(notifier_ObjectChanged);
+                    notifier.Register("dc=a24xrmdomain,dc=info", System.DirectoryServices.Protocols.SearchScope.Subtree);
+                    //notifier.Register("cn=Danije Nadjbabi | ComData,ou=ComData, ou=Extern,ou=A24-UsersAndGroups,dc=a24xrmdomain,dc=info", System.DirectoryServices.Protocols.SearchScope.Base);
+                   
+                    notifier.ObjectChanged += new EventHandler<ObjectChangedEventArgs>(notifier_ObjectChanged);
 
                         Console.WriteLine("Waiting for changes...");
                         Console.WriteLine();
                         Console.ReadLine();
                     }
-
             }
             catch (Exception e)
             {
@@ -136,32 +140,36 @@ namespace AD_CRM
         static void notifier_ObjectChanged(object sender, ObjectChangedEventArgs e)
         {
 
-            DirectoryEntry directoryEntry = new DirectoryEntry("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, @"A24XRMDOMAIN\Danijel.Nadjbabi", "Por4Xae3");
-            Console.WriteLine("DirectoryEntry_Name:" + directoryEntry.Name);
-
-            //foreach (var item in directoryEntry.Properties.Values)
-            //{
-            //    Console.WriteLine(item);
-            //}
-
-            //if (directoryEntry.Properties["objectclass"].Equals("user"))
-            //{
-            int flags = (int)directoryEntry.Properties["userAccountControl"].Value;
-            var active = !Convert.ToBoolean(flags & 0x0002);
-            Console.WriteLine(active);
-            //}
-
-            Console.WriteLine(e.Result.DistinguishedName);
-            foreach (string attrib in e.Result.Attributes.AttributeNames)
+            if (allUsersListDistinguishedName.Contains(e.Result.DistinguishedName))
             {
-                foreach (var item in e.Result.Attributes[attrib].GetValues(typeof(string)))
+                DirectoryEntry directoryEntry = new DirectoryEntry("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, @"A24XRMDOMAIN\Danijel.Nadjbabi", "Por4Xae3");
+                Console.WriteLine("DirectoryEntry_Name:" + directoryEntry.Name);
+               
+                //foreach (var item in directoryEntry.Properties.Values)      //no need if we will check only users and not groups also
+                //{
+                //    Console.WriteLine(item);
+                //}
+
+                //if (directoryEntry.Properties["objectclass"].Equals("user"))
+                //{
+                int flags = (int)directoryEntry.Properties["userAccountControl"].Value;
+                var active = !Convert.ToBoolean(flags & 0x0002);
+                Console.WriteLine(active);
+                //}
+
+                Console.WriteLine(e.Result.DistinguishedName);
+                foreach (string attrib in e.Result.Attributes.AttributeNames)
                 {
-                    Console.WriteLine("\t{0}: {1}", attrib, item);
+                    foreach (var item in e.Result.Attributes[attrib].GetValues(typeof(string)))
+                    {
+                        Console.WriteLine("\t{0}: {1}", attrib, item);
+                    }
                 }
+                Console.WriteLine();
+                Console.WriteLine("====================================================================================================================================");
+                Console.WriteLine();
+                //Console.ReadKey();
             }
-            Console.WriteLine();
-            Console.WriteLine("====================");
-            Console.WriteLine();
         }
     }
 }

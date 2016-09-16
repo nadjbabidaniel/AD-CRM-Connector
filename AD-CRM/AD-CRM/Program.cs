@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Collections.Specialized;
 using System.DirectoryServices;
 using System.DirectoryServices.Protocols;
 using System.Linq;
@@ -79,6 +80,30 @@ namespace AD_CRM
                         DirectoryEntry user = new DirectoryEntry(member);
                         allUsersList.Add(user);
 
+                        //StringCollection groups = new StringCollection();                 //show all users groups
+                        //object obGroups = user.Invoke("Groups");
+                        //foreach (object ob in (IEnumerable)obGroups)
+                        //{
+                        //    // Create object for each group.
+                        //    DirectoryEntry obGpEntry = new DirectoryEntry(ob);
+                        //    groups.Add(obGpEntry.Name);
+                        //    Console.WriteLine(obGpEntry.Name + "****************************************************************************************************************************");
+                        //}                      
+
+                        
+                        //foreach (string propName in user.Properties.PropertyNames)    //show all users properties
+                        //{
+                        //    if (user.Properties[propName].Value != null)
+                        //    {
+                        //        Console.WriteLine(propName + " = " + user.Properties[propName].Value.ToString());
+                        //    }
+                        //    else
+                        //    {
+                        //        Console.WriteLine(propName + " = NULL");
+                        //    }
+                        //}
+                        //Console.WriteLine("****************************************************************************************************************************");
+
                         int flags = (int)user.Properties["userAccountControl"].Value;
                         var active = !Convert.ToBoolean(flags & 0x0002);
 
@@ -106,7 +131,7 @@ namespace AD_CRM
                 attribs[0] = "name";
                 attribs[1] = "description";
                 attribs[2] = "objectGUID";
-                SearchRequest request = new SearchRequest("DC=a24xrmdomain,DC=info", "(CN=Danije Nadjbabi | ComData)", System.DirectoryServices.Protocols.SearchScope.Subtree, attribs);
+                SearchRequest request = new SearchRequest("DC=a24xrmdomain,DC=info", "(CN=Danije Nadjbabi | ComData)", System.DirectoryServices.Protocols.SearchScope.Subtree, attribs);  //search for one specific object
                 SearchResponse searchResponse = (SearchResponse)connection.SendRequest(request);
 
                 foreach (SearchResultEntry entry in searchResponse.Entries)
@@ -144,13 +169,19 @@ namespace AD_CRM
             {
                 DirectoryEntry directoryEntry = new DirectoryEntry("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, @"A24XRMDOMAIN\Danijel.Nadjbabi", "Por4Xae3");
                 Console.WriteLine("DirectoryEntry_Name:" + directoryEntry.Name);
-               
-                //foreach (var item in directoryEntry.Properties.Values)      //no need if we will check only users and not groups also
-                //{
-                //    Console.WriteLine(item);
-                //}
 
-                //if (directoryEntry.Properties["objectclass"].Equals("user"))
+                //StringCollection groups = new StringCollection();             //show groups that user belongs to
+                //object obGroups = directoryEntry.Invoke("Groups");
+                //foreach (object ob in (IEnumerable)obGroups)
+                //{
+                //    // Create object for each group.
+                //    DirectoryEntry obGpEntry = new DirectoryEntry(ob);
+                //    groups.Add(obGpEntry.Name);
+                //    Console.WriteLine(obGpEntry.Name + "****************************************************************************************************************************");
+                //}
+            
+
+                //if (directoryEntry.Properties["objectclass"].Equals("user"))  //(sAMAccountType = 805306368)
                 //{
                 int flags = (int)directoryEntry.Properties["userAccountControl"].Value;
                 var active = !Convert.ToBoolean(flags & 0x0002);

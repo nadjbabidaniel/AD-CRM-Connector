@@ -1,8 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <settings>
-  <activedirectory ldap="LDAP://example.com" username="username" password="password" />
+  <activedirectory ldap="XRMSERVER02.a24xrmdomain.info" username="A24XRMDOMAIN\Danijel.Nadjbabi" password="Por4Xae3" />
   <organizations>
-    <organization name="CRMAppr" url="http://crm" org="xrmappr" username="username" password="password" adgroup="ComData2" />
-    <organization name="CRMProd" url="http://crm" org="xrm" username="username" password="password" adgroup="A24-Member" />
+    <organization url="https://adtocrmconnector.dev.anywhere24.com/" org="adtocrmconnector" username="username" password="password" adgroup="ComData2" />
+    <organization url="https://adtocrmconnector.dev.anywhere24.com/" org="adtocrmconnector" username="username" password="password" adgroup="sales" />
   </organizations>
 </settings>

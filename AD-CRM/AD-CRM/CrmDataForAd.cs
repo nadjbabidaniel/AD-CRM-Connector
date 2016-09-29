@@ -15,6 +15,7 @@ namespace AD_CRM
         private Uri serviceUri;
         private OrganizationServiceProxy proxy;
         private IOrganizationService _service;
+        private OrganizationServiceContext orgSvcContext;
 
         public Entity SystemUserBasedOnId;
         public List<Entity> AD_GroupList;
@@ -31,14 +32,15 @@ namespace AD_CRM
             proxy = new OrganizationServiceProxy(serviceUri, null, credentials, null);
             proxy.EnableProxyTypes();
             _service = (IOrganizationService)proxy;
-         
+
+            orgSvcContext = new OrganizationServiceContext(_service);
         }
 
         public void DataForAdSync()
         {          
             Guid id = new Guid("271cdd05-f97e-e611-80d1-00155d10673a");
 
-            using (OrganizationServiceContext orgSvcContext = new OrganizationServiceContext(_service))
+            //using (OrganizationServiceContext orgSvcContext = new OrganizationServiceContext(_service))
             {
                 SystemUserBasedOnId = (from campaing in orgSvcContext.CreateQuery("systemuser")
                                       where campaing.GetAttributeValue<Guid>("systemuserid") == id
@@ -56,6 +58,15 @@ namespace AD_CRM
                                              //where campaing.GetAttributeValue<Guid>("systemuserid") == id
                                          select campaing).ToList();
             }
+        }
+
+        public Entity getUserFromCRM(String fullAccountName)
+        {
+                        
+            Entity SystemUserBasedOnsAMAccountName = (from user in orgSvcContext.CreateQuery("systemuser")
+                                   where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
+                                                      select user).FirstOrDefault();
+            return SystemUserBasedOnsAMAccountName;
         }
 
 

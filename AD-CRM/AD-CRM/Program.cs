@@ -18,35 +18,38 @@ namespace AD_CRM
     {
         private static String username;
         private static String password;
+        private static bool syncFirst;
         private static String groupsFromXml;
-        private static List<DirectoryEntry> allUsersList = new List<DirectoryEntry>();
-        private static List<byte[]> listIdsInByte;       
+        private static List<DirectoryEntry> allUsersListAD = new List<DirectoryEntry>();
+        private static List<Entity> allUsersListCRM = new List<Entity>();
+        private static List<byte[]> listIdsInByte;
 
         static void Main(string[] args)
-        {         
+        {
             XmlDocument doc = new XmlDocument();
             string Xml_Path = System.Reflection.Assembly.GetExecutingAssembly().Location;
             Xml_Path = System.IO.Path.Combine(System.IO.Path.GetDirectoryName(Xml_Path), "XmlData\\" + "ConfigFile.xml");
-            doc.Load(Xml_Path);          
+            doc.Load(Xml_Path);
 
             XmlNode activedirectory = doc.SelectSingleNode("/settings/activedirectory");
             string LdapConn = activedirectory.Attributes["ldap"].Value;
             username = activedirectory.Attributes["username"].Value;
             password = activedirectory.Attributes["password"].Value;
+            syncFirst = Boolean.Parse(activedirectory.Attributes["syncFirst"].Value);   //always true or false
 
             XmlNodeList xnList = doc.SelectNodes("/settings/organizations/organization/@adgroup");
-           
+
             try
             {
                 String ldapPath = "LDAP://" + LdapConn;
 
                 DirectoryEntry directoryEntry = new DirectoryEntry(ldapPath, username, password);
-               
+
                 //// Create search for all groups from config file
                 DirectorySearcher search = new DirectorySearcher(directoryEntry);
                 foreach (XmlNode item in xnList)
                 {
-                    groupsFromXml += "(CN=" + item.Value +")";
+                    groupsFromXml += "(CN=" + item.Value + ")";
                 }
                 search.Filter = String.Format("(&(ObjectClass=Group)(|{0}))", groupsFromXml);
                 SearchResultCollection results = search.FindAll();
@@ -54,18 +57,35 @@ namespace AD_CRM
                 //Create a list of users from received groups           
                 for (int i = 0; i < results.Count; i++)
                 {
-                    DirectoryEntry de = results[i].GetDirectoryEntry();                 
+                    DirectoryEntry de = results[i].GetDirectoryEntry();
                     var members = (IEnumerable)de.Invoke("members");// Invoke("members");
 
                     foreach (object member in members)
                     {
                         DirectoryEntry user = new DirectoryEntry(member);
-                        allUsersList.Add(user);                                                                 
+                        allUsersListAD.Add(user);
                     }
                 }
+                ////////////////////////////////
+                //if (allUsersListAD.Count > 0)
+                //{
+                //    var user = allUsersListAD[0];
+
+                //    foreach (string propName in user.Properties.PropertyNames)    //Show all users properties
+                //    {
+                //        if (user.Properties[propName].Value != null)
+                //        {
+                //            Console.WriteLine(propName + " = " + user.Properties[propName].Value.ToString());
+                //        }
+                //        else
+                //        {
+                //            Console.WriteLine(propName + " = NULL");
+                //        }
+                //    }
+                //}
 
                 //Get list of objectGUIDs from relevant users and populate the list with its values converted to Byte[]
-                List<PropertyValueCollection>  ids = allUsersList.Select(x => x.Properties["objectGUID"]).ToList();
+                List<PropertyValueCollection> ids = allUsersListAD.Select(x => x.Properties["objectGUID"]).ToList();
                 listIdsInByte = new List<byte[]>();
                 byte[] byteTest;
 
@@ -76,10 +96,41 @@ namespace AD_CRM
                     listIdsInByte.Add(byteTest);
                 }
 
-                CrmDataForAd CRM = new CrmDataForAd(username,password);
-                CRM.DataForAdSync();
+                CrmDataForAd CRM = new CrmDataForAd(username, password);
+                //CRM.DataForAdSync();
 
-                Entity SystemUserBasedOnId = CRM.SystemUserBasedOnId;
+
+                if (syncFirst)
+                {
+                    foreach (var userAD in allUsersListAD)
+                    {
+                        string fullAccountName = @"A24XRMDOMAIN\" + userAD.Properties["sAMAccountName"].Value.ToString();
+                        Entity crmUser = CRM.getUserFromCRM(fullAccountName);
+                        if (crmUser != null)
+                        {
+
+                            var property = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("firstname"));
+                            //property.Value = "";// userAD.Properties["givenName"].Value;
+
+                            crmUser.Attributes[property.Key] = Math.Round(property.Key, 3);
+
+
+
+                            allUsersListCRM.Add(crmUser);
+                        }
+                    }
+                }
+
+                //if (allUsersListCRM.Count > 0)
+                //{
+                //    var user = allUsersListCRM[0];
+
+                //    foreach (var propName in user.Attributes)    //Show all users properties
+                //    {
+                //        Console.WriteLine(propName.Key + " = " + propName.Value);
+                //    }
+                //}
+
 
 
 
@@ -88,24 +139,24 @@ namespace AD_CRM
 
 
                 //Create Ldap connection for notifiers and remove domainName from user for loging
-                username = username.Substring(username.IndexOf(@"\")+1);
+                username = username.Substring(username.IndexOf(@"\") + 1);
 
                 LdapConnection connection = new LdapConnection(LdapConn);
-                var credentials = new NetworkCredential(username, password);             
+                var credentials = new NetworkCredential(username, password);
                 connection.Credential = credentials;
-                connection.Bind();             
-               
-                    using (ChangeNotifier notifier = new ChangeNotifier(connection))
-                    {
+                connection.Bind();
+
+                using (ChangeNotifier notifier = new ChangeNotifier(connection))
+                {
                     //register some objects for notifications (limit 5)
                     notifier.Register("dc=a24xrmdomain,dc=info", System.DirectoryServices.Protocols.SearchScope.Subtree);
-                   
+
                     notifier.ObjectChanged += new EventHandler<ObjectChangedEventArgs>(notifier_ObjectChanged);
 
-                        Console.WriteLine("Waiting for changes...");
-                        Console.WriteLine();
-                        Console.ReadLine();
-                    }
+                    Console.WriteLine("Waiting for changes...");
+                    Console.WriteLine();
+                    Console.ReadLine();
+                }
             }
             catch (Exception e)
             {
@@ -117,11 +168,11 @@ namespace AD_CRM
 
         static void notifier_ObjectChanged(object sender, ObjectChangedEventArgs e)
         {
-            //if ((e.Result.DistinguishedName).Contains("OU=AD2CRM,OU=ComData,OU=Extern,OU=A24-UsersAndGroups,DC=a24xrmdomain,DC=info"))
-            {                               
+            if ((e.Result.DistinguishedName).Contains("OU=AD2CRM,OU=ComData,OU=Extern,OU=A24-UsersAndGroups,DC=a24xrmdomain,DC=info"))
+            {
                 object[] objectGuid = e.Result.Attributes["objectguid"].GetValues(typeof(Byte[]));
                 byte[] byteTest2 = (System.Byte[])objectGuid[0];
-                
+
                 //if (listIdsInByte[0].SequenceEqual(byteTest2))
                 bool contains = listIdsInByte.Any(x => x.SequenceEqual(byteTest2));
                 if (contains)

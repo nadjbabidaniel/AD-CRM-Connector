@@ -60,13 +60,22 @@ namespace AD_CRM
             }
         }
 
-        public Entity getUserFromCRM(String fullAccountName)
+        public Entity GetUserFromCRM(String fullAccountName)
         {
                         
             Entity SystemUserBasedOnsAMAccountName = (from user in orgSvcContext.CreateQuery("systemuser")
                                    where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
                                                       select user).FirstOrDefault();
             return SystemUserBasedOnsAMAccountName;
+        }
+
+        public void UpdateCrmEntity(Entity entity)
+        {
+          
+            orgSvcContext.UpdateObject(entity);
+            orgSvcContext.SaveChanges();
+
+
         }
 
 

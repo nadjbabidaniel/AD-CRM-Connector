@@ -83,6 +83,7 @@ namespace AD_CRM
                 //        }
                 //    }
                 //}
+                //Console.ReadKey();
 
                 //Get list of objectGUIDs from relevant users and populate the list with its values converted to Byte[]
                 List<PropertyValueCollection> ids = allUsersListAD.Select(x => x.Properties["objectGUID"]).ToList();
@@ -105,21 +106,56 @@ namespace AD_CRM
                     foreach (var userAD in allUsersListAD)
                     {
                         string fullAccountName = @"A24XRMDOMAIN\" + userAD.Properties["sAMAccountName"].Value.ToString();
-                        Entity crmUser = CRM.getUserFromCRM(fullAccountName);
+                        Entity crmUser = CRM.GetUserFromCRM(fullAccountName);
                         if (crmUser != null)
                         {
-
-                            var property = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("firstname"));
-                            //property.Value = "";// userAD.Properties["givenName"].Value;
-
-                            crmUser.Attributes[property.Key] = Math.Round(property.Key, 3);
-
+                            // Add condition in case if flag allows this for RELEVANT DATA
+                            //TODO try catch for no values also and for CRM access
+                            string givenname = userAD.Properties["givenname"].Value.ToString();
+                            string l= userAD.Properties["l"].Value.ToString();
 
 
+                            var firstname = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("firstname"));
+                            crmUser.Attributes[firstname.Key] = userAD.Properties["givenname"].Value.ToString();
+
+                            var lastname = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("lastname"));
+                            crmUser.Attributes[lastname.Key] = userAD.Properties["sn"].Value.ToString();
+
+                            var title = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("title"));
+                            crmUser.Attributes[title.Key] = userAD.Properties["title"].Value.ToString();                                              
+
+                            var address1_line1 = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_line1"));
+                            crmUser.Attributes[address1_line1.Key] = userAD.Properties["streetAddress"].Value.ToString();
+
+                            var address1_city = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_city"));
+                            crmUser.Attributes[address1_city.Key] = userAD.Properties["l"].Value.ToString();
+
+                            var address1_postalcode = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_postalcode"));
+                            crmUser.Attributes[address1_postalcode.Key] = userAD.Properties["postalCode"].Value.ToString();
+
+                            var address1_stateorprovince = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_stateorprovince"));
+                            crmUser.Attributes[address1_stateorprovince.Key] = userAD.Properties["st"].Value.ToString();
+
+                            var address1_country = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_country"));
+                            crmUser.Attributes[address1_country.Key] = userAD.Properties["co"].Value.ToString();
+
+
+                            var address1_telephone1 = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_telephone1"));
+                            crmUser.Attributes[address1_telephone1.Key] = userAD.Properties["telephoneNumber"].Value.ToString();
+
+                            var mobilephone = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("mobilephone"));
+                            crmUser.Attributes[mobilephone.Key] = userAD.Properties["mobile"].Value.ToString();
+
+                            var address1_fax = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_fax"));
+                            crmUser.Attributes[address1_fax.Key] = userAD.Properties["facsimileTelephoneNumber"].Value.ToString();
+                           
+
+                            //CRM.UpdateCrmEntity(crmUser);
                             allUsersListCRM.Add(crmUser);
                         }
                     }
-                }
+                }               
+
 
                 //if (allUsersListCRM.Count > 0)
                 //{
@@ -130,13 +166,6 @@ namespace AD_CRM
                 //        Console.WriteLine(propName.Key + " = " + propName.Value);
                 //    }
                 //}
-
-
-
-
-
-
-
 
                 //Create Ldap connection for notifiers and remove domainName from user for loging
                 username = username.Substring(username.IndexOf(@"\") + 1);
@@ -172,6 +201,7 @@ namespace AD_CRM
             {
                 object[] objectGuid = e.Result.Attributes["objectguid"].GetValues(typeof(Byte[]));
                 byte[] byteTest2 = (System.Byte[])objectGuid[0];
+                //string strTemp = BitConverter.ToString(byteTest2);
 
                 //if (listIdsInByte[0].SequenceEqual(byteTest2))
                 bool contains = listIdsInByte.Any(x => x.SequenceEqual(byteTest2));

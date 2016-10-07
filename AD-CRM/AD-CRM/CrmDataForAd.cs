@@ -69,22 +69,21 @@ namespace AD_CRM
         public Entity GetUserFromCRM(String fullAccountName)
         {
 
-            Entity SystemUserBasedOnsAMAccountName = (from user in orgSvcContext.CreateQuery("systemuser")
+            Entity SystemUser = (from user in orgSvcContext.CreateQuery("systemuser")
                                                       where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
                                                       select user).FirstOrDefault();
-            return SystemUserBasedOnsAMAccountName;
+            return SystemUser;
         }
 
         public void UpdateCrmEntity(Entity entity)
         {
+            //entity.EntityState = EntityState.Changed;
             //_service.Update(entity);
 
-            orgSvcContext.ClearChanges();
-
-            orgSvcContext.Attach(entity);
+            //orgSvcContext.ClearChanges();
+            //orgSvcContext.Attach(entity);
             orgSvcContext.UpdateObject(entity);
             orgSvcContext.SaveChanges();
-           
 
         }
 
@@ -113,26 +112,28 @@ namespace AD_CRM
             if (!String.IsNullOrEmpty(OU))
             {
                 Entity businessUnit = null;
-                businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.Attributes.Values.ToArray()[1].ToString().Equals(OU));       
-                
-                if(businessUnit != null)
+                businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.Attributes.Values.ToArray()[1].ToString().Equals(OU)); //Find BU with the same name
+
+                if (businessUnit == null)
                 {
-                    String businesID = businessUnit.Attributes.Values.ToArray()[0].ToString();
+                    //Take parent BU - he is only one with two attribute values, ie dont have parent BU
+                    businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.Attributes.Values.Count == 2);
+                }
 
-                    Entity user = CreateNewCrmSystemuUer(businesID);
+                String businesID = businessUnit.Attributes.Values.ToArray()[0].ToString();
+                Entity user = CreateNewCrmSystemuUer(businesID);
 
-                    var userCrmId = (from userTemp in orgSvcContext.CreateQuery("systemuser")
-                     where userTemp.GetAttributeValue<String>("domainname").Equals("an.doe1@a24xrmdomain.info")
-                     select userTemp.Id).FirstOrDefault();
+                //var userCrmId = (from userTemp in orgSvcContext.CreateQuery("systemuser")
+                //                 where userTemp.GetAttributeValue<String>("domainname").Equals(ADuser.Properties["userPrincipalName"].Value.ToString())
+                //                 select userTemp).FirstOrDefault();
 
-                    user["systemuserid"] = userCrmId;
+                //user["systemuserid"] = userCrmId.Id;
 
-                    Entity synchronizedUser = Synchronization(ADuser, user);
+                Entity synchronizedUser = Synchronization(ADuser, user);
 
-                    UpdateCrmEntity(synchronizedUser);
-                    //var _accountId = _service.Create(user);
+                //_service.Update(entity);        //UpdateCrmEntity(synchronizedUser); 
+                //var _accountId = _service.Create(synchronizedUser);
 
-                }                                                                   
             }
         }
 
@@ -140,19 +141,19 @@ namespace AD_CRM
         {
             Entity user = new Entity("systemuser");
 
-            //user["systemuserid"] = new Guid();
+            user["systemuserid"] = new Guid();
             user["domainname"] = String.Empty;
             user["firstname"] = String.Empty;
             user["lastname"] = String.Empty;
             user["title"] = String.Empty;
-            user["address1_city"] = String.Empty;          
+            user["address1_city"] = String.Empty;
             user["address1_line1"] = String.Empty;
             user["address1_postalcode"] = String.Empty;
             user["address1_stateorprovince"] = String.Empty;
             user["address1_country"] = String.Empty;
             user["address1_telephone1"] = String.Empty;
             user["mobilephone"] = String.Empty;
-            user["address1_fax"] = String.Empty;     
+            user["address1_fax"] = String.Empty;
 
             Guid ownerId = new Guid(businesID);
             user["businessunitid"] = new EntityReference("businessunit", ownerId);
@@ -165,8 +166,16 @@ namespace AD_CRM
 
             if (ADuser.Properties["userPrincipalName"].Value != null)
             {
+                string userPrincipalName = ADuser.Properties["userPrincipalName"].Value.ToString();
+                string[] words = userPrincipalName.Split('@');
+                string username = words[0];
+                string[] domains = words[1].Split('.');
+                string domain = domains[0];
+
+                string fullDomainName = domain.ToUpper() + @"\" + username;
+
                 var domainname = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("domainname"));
-                crmUser.Attributes[domainname.Key] = ADuser.Properties["userPrincipalName"].Value.ToString();
+                crmUser.Attributes[domainname.Key] = fullDomainName;
             }
 
             if (ADuser.Properties["givenname"].Value != null)
@@ -191,7 +200,7 @@ namespace AD_CRM
             {
                 var address1_city = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_city"));
                 crmUser.Attributes[address1_city.Key] = ADuser.Properties["l"].Value.ToString();
-            }                      
+            }
 
             if (ADuser.Properties["streetAddress"].Value != null)
             {
@@ -236,7 +245,7 @@ namespace AD_CRM
             }
 
 
-            
+
 
             return crmUser;
         }

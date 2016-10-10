@@ -64,9 +64,9 @@ namespace AD_CRM
                 for (int i = 0; i < results.Count; i++)
                 {
                     DirectoryEntry de = results[i].GetDirectoryEntry();
-                    allGroupListAD.Add(de);
-                    var members = (IEnumerable)de.Invoke("members");// Invoke("members");
+                    allGroupListAD.Add(de);                  
 
+                    var members = (IEnumerable)de.Invoke("members");// Invoke("members");
                     foreach (object member in members)
                     {
                         DirectoryEntry user = new DirectoryEntry(member);
@@ -132,6 +132,9 @@ namespace AD_CRM
                             //var overwriteactivedirectorysync = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("new_overwriteactivedirectorysync"));
 
                             Entity synchronizedUser = CRM.Synchronization(userAD, crmUser);
+
+                            CRM.UpdateFromDataModel(userAD, crmUser);
+
                             CRM.UpdateCrmEntity(synchronizedUser);
 
                             allUsersListCRM.Add(crmUser);
@@ -215,8 +218,20 @@ namespace AD_CRM
                         Entity synchronizedUser = CRM.Synchronization(userAD, crmUser);
                         CRM.UpdateCrmEntity(synchronizedUser);
                     }
+                    //User active or deactivated
+                    int flags = (int)userAD.Properties["userAccountControl"].Value;
+                    var active = !Convert.ToBoolean(flags & 0x0002);
+                    if(active == false) Console.WriteLine("User deactivated"); //Logging part
 
-
+                    //Part to check if user has changed his OU
+                    foreach (var item in allUsersListAD)
+                    {
+                        byte[] tempBute = ObjectGuid(item.Properties["objectguid"].Value);
+                        if(tempBute.SequenceEqual(byteTest))
+                        {
+                            if (!item.Properties["distinguishedName"].Value.ToString().Equals(userAD.Properties["distinguishedName"].Value.ToString())) Console.WriteLine("User has changed his OU");break;
+                        }
+                    }
 
                     Console.WriteLine();
                     Console.WriteLine("====================================================================================================================================");
@@ -257,9 +272,10 @@ namespace AD_CRM
 
                     List<DirectoryEntry> UsersAddedToGroups = new List<DirectoryEntry>(); //Users that are Added to Group
                     List<DirectoryEntry> UsersRemovedFromGroup = new List<DirectoryEntry>(); //Users that are Removed to Group
-                    if (newGroupUsersList.Count != oldGroupUsersList.Count)
+
+                    //if (newGroupUsersList.Count != oldGroupUsersList.Count)
                     {
-                        if (newGroupUsersList.Count > oldGroupUsersList.Count)
+                        if (newGroupUsersList.Count >= oldGroupUsersList.Count)
                         {
                             foreach (var newGroup in newGroupUsersList)
                             {
@@ -307,6 +323,17 @@ namespace AD_CRM
                 }
             }
         }
+        //static private void updateFromDataModel(DirectoryEntry ADuser, Entity CRMuser)
+        //{
+        //    List<DirectoryEntry> userGroups = new List<DirectoryEntry>();                 //Show all users groups
+        //    object obGroups = ADuser.Invoke("Groups");
+        //    foreach (object ob in (IEnumerable)obGroups)
+        //    {
+        //        // Create object for each group.
+        //        DirectoryEntry obGpEntry = new DirectoryEntry(ob);
+        //        userGroups.Add(obGpEntry);                
+        //    }
+        //}
 
         static Byte[] ObjectGuid(object o)
         {

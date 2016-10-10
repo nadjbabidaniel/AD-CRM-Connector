@@ -307,45 +307,45 @@ namespace AD_CRM
             //{
             //    foreach (Entity entRole in entColRoles.Entities)
             //    {
-            //        listOfUserRoles.Add(entRole.Attributes["name"].ToString().ToLower());                    
-            //    }
-            //}
-
-            //////PART FOR READING USER teams:
-            //List<String> listOfUserTeams = new List<String>();
-            //QueryExpression queryExpressionTeam = new QueryExpression();
-            //queryExpressionTeam.EntityName = "role"; //role entity name
-            //ColumnSet colsTeam = new ColumnSet();
-            //colsTeam.AddColumn("name"); //We only need role name
-            //queryExpressionTeam.ColumnSet = colsTeam;
-            //ConditionExpression ce = new ConditionExpression();
-            //ce.AttributeName = "systemuserid";
-            //ce.Operator = ConditionOperator.Equal;
-            //ce.Values.Add(CRMuser.Id);
-            ////system roles
-            //LinkEntity lnkEntityRole = new LinkEntity();
-            //lnkEntityRole.LinkFromAttributeName = "roleid";
-            //lnkEntityRole.LinkFromEntityName = "role"; //FROM
-            //lnkEntityRole.LinkToEntityName = "systemuserroles";
-            //lnkEntityRole.LinkToAttributeName = "roleid";
-            ////system users
-            //LinkEntity lnkEntitySystemusers = new LinkEntity();
-            //lnkEntitySystemusers.LinkFromEntityName = "systemuserroles";
-            //lnkEntitySystemusers.LinkFromAttributeName = "systemuserid";
-            //lnkEntitySystemusers.LinkToEntityName = "systemuser";
-            //lnkEntitySystemusers.LinkToAttributeName = "systemuserid";
-            //lnkEntitySystemusers.LinkCriteria = new FilterExpression();
-            //lnkEntitySystemusers.LinkCriteria.Conditions.Add(ce);
-            //lnkEntityRole.LinkEntities.Add(lnkEntitySystemusers);
-            //queryExpression.LinkEntities.Add(lnkEntityRole);
-            //EntityCollection entColRoles = _service.RetrieveMultiple(queryExpression);
-            //if (entColRoles != null && entColRoles.Entities.Count > 0)
-            //{
-            //    foreach (Entity entRole in entColRoles.Entities)
-            //    {
             //        listOfUserRoles.Add(entRole.Attributes["name"].ToString().ToLower());
             //    }
             //}
+
+            ////PART FOR READING USER TEAMS:
+            List<String> listOfUserTeams = new List<String>();
+            QueryExpression queryExpressionTeams = new QueryExpression();
+            queryExpressionTeams.EntityName = "team"; //role entity name
+            ColumnSet colsTeams = new ColumnSet();
+            colsTeams.AddColumn("name"); //We only need role name
+            queryExpressionTeams.ColumnSet = colsTeams;
+            ConditionExpression ceTeams = new ConditionExpression();
+            ceTeams.AttributeName = "systemuserid";
+            ceTeams.Operator = ConditionOperator.Equal;
+            ceTeams.Values.Add(CRMuser.Id);
+            //system roles
+            LinkEntity lnkEntityTeam = new LinkEntity();
+            lnkEntityTeam.LinkFromAttributeName = "roleid";
+            lnkEntityTeam.LinkFromEntityName = "role"; //FROM
+            lnkEntityTeam.LinkToEntityName = "systemuserroles";
+            lnkEntityTeam.LinkToAttributeName = "roleid";
+            //system users
+            LinkEntity lnkEntitySystemusersTeams = new LinkEntity();
+            lnkEntitySystemusersTeams.LinkFromEntityName = "systemuserroles";
+            lnkEntitySystemusersTeams.LinkFromAttributeName = "systemuserid";
+            lnkEntitySystemusersTeams.LinkToEntityName = "systemuser";
+            lnkEntitySystemusersTeams.LinkToAttributeName = "systemuserid";
+            lnkEntitySystemusersTeams.LinkCriteria = new FilterExpression();
+            lnkEntitySystemusersTeams.LinkCriteria.Conditions.Add(ceTeams);
+            lnkEntityTeam.LinkEntities.Add(lnkEntitySystemusersTeams);
+            queryExpressionTeams.LinkEntities.Add(lnkEntityTeam);
+            EntityCollection entColTeams = _service.RetrieveMultiple(queryExpressionTeams);
+            if (entColTeams != null && entColTeams.Entities.Count > 0)
+            {
+                foreach (Entity entTeam in entColTeams.Entities)
+                {
+                    listOfUserTeams.Add(entTeam.Attributes["name"].ToString().ToLower());
+                }
+            }
 
 
 

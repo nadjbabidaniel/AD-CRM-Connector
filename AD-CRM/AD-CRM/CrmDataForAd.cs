@@ -12,6 +12,12 @@ using System.ServiceModel.Description;
 
 namespace AD_CRM
 {
+    enum SecurityObjectType
+    {
+        SecurityRole = 602370000,
+        Team = 602370001
+    };
+
     public class CrmDataForAd
     {
         private static string soapOrgServiceUri = "https://adtocrmconnector.dev.anywhere24.com/XRMServices/2011/Organization.svc";
@@ -50,9 +56,9 @@ namespace AD_CRM
         }
 
         public void DataForAdSync()
-        {          
+        {
             //using (OrganizationServiceContext orgSvcContext = new OrganizationServiceContext(_service))
-            {               
+            {
                 AD_GroupList = (from groupList in orgSvcContext.CreateQuery("a24_adgroup")
                                 select groupList).ToList();
 
@@ -69,21 +75,29 @@ namespace AD_CRM
                 AllTeams = (from team in orgSvcContext.CreateQuery("team")
                             where team.GetAttributeValue<bool>("isdefault") == false
                             select team).ToList();
+
+
+                var List = (from groupList in orgSvcContext.CreateQuery("a24_logging") //Logging
+                            select groupList).ToList();
+
+
             }
         }
 
-        public Entity GetUserFromCRM(String fullAccountName)
+        public Entity GetUserFromCRM(DirectoryEntry ADuser)
         {
-            Entity SystemUser = (from user in orgSvcContext.CreateQuery("systemuser")
-                                 where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
-                                 select user).FirstOrDefault();
-            return SystemUser;
+            string fullAccountName = @"A24XRMDOMAIN\" + ADuser.Properties["sAMAccountName"].Value.ToString();   //Hard coded  @"A24XRMDOMAIN\"  !
+
+            Entity CRMuser = (from user in orgSvcContext.CreateQuery("systemuser")
+                              where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
+                              select user).FirstOrDefault();
+            return CRMuser;
         }
 
-        public void UpdateCrmEntity(Entity entity)
-        {           
+        public void UpdateCrmUser(Entity crmUser)
+        {
             //_service.Update(entity);
-            orgSvcContext.UpdateObject(entity);
+            orgSvcContext.UpdateObject(crmUser);
             orgSvcContext.SaveChanges();
         }
 
@@ -101,53 +115,44 @@ namespace AD_CRM
         public void CreateNewCRMUser(DirectoryEntry ADuser)
         {
             string distinguishedName = ADuser.Properties["distinguishedName"].Value.ToString();
-            string[] words = distinguishedName.Split(',');
+            string[] words = distinguishedName.Split(new[] { ",OU=" }, StringSplitOptions.None);
 
-            string OU = String.Empty;
-            if (words[1].StartsWith("OU"))
+            string OU = words[1];
+
+            Entity businessUnit = null;
+            businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.GetAttributeValue<string>("name").Equals(OU));    //Find BU with the same name  --You can test creation of new user in case existing BU
+
+            if (businessUnit == null)
             {
-                OU = words[1].Substring(3);
+                //Take parent BU - he is only one with two attribute values, ie dont have parent BU
+                businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.Attributes.Values.Count == 2);
             }
 
-            if (!String.IsNullOrEmpty(OU))
+            Guid businesID = businessUnit.GetAttributeValue<Guid>("businessunitid");
+            Entity CRMuser = CreateNewCrmSystemuUser(businesID);
+            Entity synchronizedCRMuser = Synchronization(ADuser, CRMuser);
+
+            string fullAccountName = @"A24XRMDOMAIN\" + ADuser.Properties["sAMAccountName"].Value.ToString();
+            var userCrm = (from userTemp in orgSvcContext.CreateQuery("systemuser")
+                           where userTemp.GetAttributeValue<String>("domainname").Equals(fullAccountName)
+                           select userTemp).FirstOrDefault();
+
+            if (userCrm == null)
             {
-                Entity businessUnit = null;
-                businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.Attributes.Values.ToArray()[1].ToString().Equals(OU)); //Find BU with the same name
-
-                if (businessUnit == null)
-                {
-                    //Take parent BU - he is only one with two attribute values, ie dont have parent BU
-                    businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.Attributes.Values.Count == 2);
-                }
-
-                String businesID = businessUnit.Attributes.Values.ToArray()[0].ToString();
-                Entity CRMuser = CreateNewCrmSystemuUser(businesID);
-                Entity synchronizedCRMuser = Synchronization(ADuser, CRMuser);
-
-                string fullAccountName = @"A24XRMDOMAIN\" + ADuser.Properties["sAMAccountName"].Value.ToString();
-                var userCrm = (from userTemp in orgSvcContext.CreateQuery("systemuser")
-                                 where userTemp.GetAttributeValue<String>("domainname").Equals(fullAccountName)
-                                 select userTemp).FirstOrDefault();
-
-                //userCrm["systemuserid"] = userCrmId.Id;              
-                //_service.Update(entity);        //UpdateCrmEntity(synchronizedUser); 
                 try
                 {
-                    if (userCrm == null)
-                    {
-                        //var _accountId = _service.Create(synchronizedUser);
-                    }
+                    //var _accountId = _service.Create(synchronizedUser);
                 }
                 catch (Exception ex) { }
-
             }
         }
 
-        public Entity CreateNewCrmSystemuUser(string businesID)
+        public Entity CreateNewCrmSystemuUser(Guid businesID)
         {
             Entity user = new Entity("systemuser");
 
             user["systemuserid"] = new Guid();
+            user["islicensed"] = false;                      // No licence
             user["domainname"] = String.Empty;
             user["firstname"] = String.Empty;
             user["lastname"] = String.Empty;
@@ -160,16 +165,13 @@ namespace AD_CRM
             user["address1_telephone1"] = String.Empty;
             user["mobilephone"] = String.Empty;
             user["address1_fax"] = String.Empty;
-
-            Guid ownerId = new Guid(businesID);
-            user["businessunitid"] = new EntityReference("businessunit", ownerId);
+            user["businessunitid"] = new EntityReference("businessunit", businesID);
 
             return user;
         }
 
         public Entity Synchronization(DirectoryEntry ADuser, Entity crmUser)
         {
-
             if (ADuser.Properties["userPrincipalName"].Value != null)
             {
                 string userPrincipalName = ADuser.Properties["userPrincipalName"].Value.ToString();
@@ -224,7 +226,7 @@ namespace AD_CRM
             }
 
             if (ADuser.Properties["telephoneNumber"].Value != null)
-            {               
+            {
                 crmUser.Attributes["address1_telephone1"] = ADuser.Properties["telephoneNumber"].Value.ToString();
             }
 
@@ -238,11 +240,11 @@ namespace AD_CRM
                 crmUser.Attributes["address1_fax"] = ADuser.Properties["facsimileTelephoneNumber"].Value.ToString();
             }
 
+            crmUser.Attributes["a24_adsync"] = true;   //check if he receive bool or string              
+
+
             return crmUser;
         }
-
-
-
 
         public void UpdateFromDataModel(DirectoryEntry ADuser, Entity CRMuser)
         {
@@ -343,9 +345,9 @@ namespace AD_CRM
                                                       .Equals(a24_valueListCrmSecurityObjectIdConn.GetAttributeValue<Guid>("a24_crmsecurityobjectid").ToString()));
 
                         string nameValue = crmSecurityObject.GetAttributeValue<string>("a24_name");
-                        string typeValue = crmSecurityObject.GetAttributeValue<bool>("a24_type").ToString();
+                        OptionSetValue typeValue = crmSecurityObject.GetAttributeValue<OptionSetValue>("a24_type_opt");
 
-                        if (typeValue.Equals("False"))  //should be changed when model is changed with false -> role
+                        if (typeValue.Value == (int)(SecurityObjectType.SecurityRole))  //should be changed when model is changed with false -> role
                         {
                             if (AllRoles.Count > 0)
                             {
@@ -368,7 +370,7 @@ namespace AD_CRM
                                 }
                             }
                         }
-                        else if (typeValue.Equals("True"))  //should be changed when model is changed with false -> team
+                        else if (typeValue.Value == (int)(SecurityObjectType.Team))  //should be changed when model is changed with false -> team
                         {
                             if (AllTeams.Count > 0)
                             {
@@ -392,6 +394,20 @@ namespace AD_CRM
                         }
                     }
                 }
+            }
+        }
+        public void CompareOUandBU(DirectoryEntry ADuser, Entity CRMuser)
+        {
+            string distinguishedName = ADuser.Properties["distinguishedName"].Value.ToString();
+            string[] words = distinguishedName.Split(new[] { ",OU=" }, StringSplitOptions.None);
+
+            string OU = words[1];
+
+            EntityReference crmBusinessUnit = CRMuser.GetAttributeValue<EntityReference>("businessunitid");
+
+            if (!OU.Equals(crmBusinessUnit.Name))
+            {
+                //Do the logging part that UO name is not the same as BU name 
             }
         }
     }

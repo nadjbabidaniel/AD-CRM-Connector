@@ -1,16 +1,25 @@
-﻿using Microsoft.Xrm.Sdk;
+﻿using Microsoft.Crm.Sdk.Messages;
+using Microsoft.Xrm.Sdk;
 using Microsoft.Xrm.Sdk.Client;
+using Microsoft.Xrm.Sdk.Query;
 using System;
+using System.Collections;
 using System.Collections.Generic;
+using System.DirectoryServices;
 using System.Linq;
 using System.ServiceModel.Description;
-using System.Text;
-using System.Threading.Tasks;
+
 
 namespace AD_CRM
 {
+    enum SecurityObjectType
+    {
+        SecurityRole = 602370000,
+        Team = 602370001
+    };
+
     public class CrmDataForAd
-    {        
+    {
         private static string soapOrgServiceUri = "https://adtocrmconnector.dev.anywhere24.com/XRMServices/2011/Organization.svc";
         private Uri serviceUri;
         private OrganizationServiceProxy proxy;
@@ -20,7 +29,13 @@ namespace AD_CRM
         public Entity SystemUserBasedOnId;
         public List<Entity> AD_GroupList;
         public List<Entity> AD_Groups__CrmsSecurityObject;
-        public List<Entity> CRMsecurityobjectList;
+        public List<Entity> CRMsecurityObjectList;
+
+        public List<Entity> AllRoles;
+        public List<Entity> AllTeams;
+
+
+        public EntityCollection Results;
 
         public CrmDataForAd(string user, string pass)
         {
@@ -34,50 +49,366 @@ namespace AD_CRM
             _service = (IOrganizationService)proxy;
 
             orgSvcContext = new OrganizationServiceContext(_service);
+
+            //Populate list of all business units and Data model
+            ListOfBusinessUnits();
+            DataForAdSync();
         }
 
         public void DataForAdSync()
-        {          
-            Guid id = new Guid("271cdd05-f97e-e611-80d1-00155d10673a");
-
+        {
             //using (OrganizationServiceContext orgSvcContext = new OrganizationServiceContext(_service))
             {
-                SystemUserBasedOnId = (from campaing in orgSvcContext.CreateQuery("systemuser")
-                                      where campaing.GetAttributeValue<Guid>("systemuserid") == id
-                                      select campaing).FirstOrDefault();
+                AD_GroupList = (from groupList in orgSvcContext.CreateQuery("a24_adgroup")
+                                select groupList).ToList();
 
-                AD_GroupList = (from campaing in orgSvcContext.CreateQuery("a24_adgroup")
-                                     //where campaing.GetAttributeValue<Guid>("systemuserid") == id
-                                 select campaing).ToList();
+                AD_Groups__CrmsSecurityObject = (from GroupsObjects in orgSvcContext.CreateQuery("a24_a24_crmsecurityobject_a24_adgroup")
+                                                 select GroupsObjects).ToList();
 
-                AD_Groups__CrmsSecurityObject = (from campaing in orgSvcContext.CreateQuery("a24_a24_crmsecurityobject_a24_adgroup")
-                                                         //where campaing.GetAttributeValue<Guid>("systemuserid") == id
-                                                     select campaing).ToList();
+                CRMsecurityObjectList = (from crmSecObject in orgSvcContext.CreateQuery("a24_crmsecurityobject")
+                                         select crmSecObject).ToList();
 
-                CRMsecurityobjectList = (from campaing in orgSvcContext.CreateQuery("a24_crmsecurityobject")
-                                             //where campaing.GetAttributeValue<Guid>("systemuserid") == id
-                                         select campaing).ToList();
+                AllRoles = (from role in orgSvcContext.CreateQuery("role")
+                            select role).ToList();
+
+                //list of all NOT default Teams
+                AllTeams = (from team in orgSvcContext.CreateQuery("team")
+                            where team.GetAttributeValue<bool>("isdefault") == false
+                            select team).ToList();
+
+
+                var List = (from groupList in orgSvcContext.CreateQuery("a24_logging") //Logging
+                            select groupList).ToList();
+
+
             }
         }
 
-        public Entity GetUserFromCRM(String fullAccountName)
+        public Entity GetUserFromCRM(DirectoryEntry ADuser)
         {
-                        
-            Entity SystemUserBasedOnsAMAccountName = (from user in orgSvcContext.CreateQuery("systemuser")
-                                   where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
-                                                      select user).FirstOrDefault();
-            return SystemUserBasedOnsAMAccountName;
+            string fullAccountName = @"A24XRMDOMAIN\" + ADuser.Properties["sAMAccountName"].Value.ToString();   //Hard coded  @"A24XRMDOMAIN\"  !
+
+            Entity CRMuser = (from user in orgSvcContext.CreateQuery("systemuser")
+                              where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
+                              select user).FirstOrDefault();
+            return CRMuser;
         }
 
-        public void UpdateCrmEntity(Entity entity)
+        public void UpdateCrmUser(Entity crmUser)
         {
-          
-            orgSvcContext.UpdateObject(entity);
+            //_service.Update(entity);
+            orgSvcContext.UpdateObject(crmUser);
             orgSvcContext.SaveChanges();
-
-
         }
 
+        public void ListOfBusinessUnits()
+        {
+            QueryExpression businessUnitQuery = new QueryExpression
+            {
+                EntityName = "businessunit",
+                ColumnSet = new ColumnSet("businessunitid", "name", "parentbusinessunitid"),
+            };
 
+            Results = _service.RetrieveMultiple(businessUnitQuery);
+        }
+
+        public void CreateNewCRMUser(DirectoryEntry ADuser)
+        {
+            string distinguishedName = ADuser.Properties["distinguishedName"].Value.ToString();
+            string[] words = distinguishedName.Split(new[] { ",OU=" }, StringSplitOptions.None);
+
+            string OU = words[1];
+
+            Entity businessUnit = null;
+            businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.GetAttributeValue<string>("name").Equals(OU));    //Find BU with the same name  --You can test creation of new user in case existing BU
+
+            if (businessUnit == null)
+            {
+                //Take parent BU - he is only one with two attribute values, ie dont have parent BU
+                businessUnit = Results.Entities.ToList().FirstOrDefault(x => x.Attributes.Values.Count == 2);
+            }
+
+            Guid businesID = businessUnit.GetAttributeValue<Guid>("businessunitid");
+            Entity CRMuser = CreateNewCrmSystemuUser(businesID);
+            Entity synchronizedCRMuser = Synchronization(ADuser, CRMuser);
+
+            string fullAccountName = @"A24XRMDOMAIN\" + ADuser.Properties["sAMAccountName"].Value.ToString();
+            var userCrm = (from userTemp in orgSvcContext.CreateQuery("systemuser")
+                           where userTemp.GetAttributeValue<String>("domainname").Equals(fullAccountName)
+                           select userTemp).FirstOrDefault();
+
+            if (userCrm == null)
+            {
+                try
+                {
+                    //var _accountId = _service.Create(synchronizedUser);
+                }
+                catch (Exception ex) { }
+            }
+        }
+
+        public Entity CreateNewCrmSystemuUser(Guid businesID)
+        {
+            Entity user = new Entity("systemuser");
+
+            user["systemuserid"] = new Guid();
+            user["islicensed"] = false;                      // No licence
+            user["domainname"] = String.Empty;
+            user["firstname"] = String.Empty;
+            user["lastname"] = String.Empty;
+            user["title"] = String.Empty;
+            user["address1_city"] = String.Empty;
+            user["address1_line1"] = String.Empty;
+            user["address1_postalcode"] = String.Empty;
+            user["address1_stateorprovince"] = String.Empty;
+            user["address1_country"] = String.Empty;
+            user["address1_telephone1"] = String.Empty;
+            user["mobilephone"] = String.Empty;
+            user["address1_fax"] = String.Empty;
+            user["businessunitid"] = new EntityReference("businessunit", businesID);
+
+            return user;
+        }
+
+        public Entity Synchronization(DirectoryEntry ADuser, Entity crmUser)
+        {
+            if (ADuser.Properties["userPrincipalName"].Value != null)
+            {
+                string userPrincipalName = ADuser.Properties["userPrincipalName"].Value.ToString();
+                string[] words = userPrincipalName.Split('@');
+                string username = words[0];
+                string[] domains = words[1].Split('.');
+                string domain = domains[0];
+
+                string fullDomainName = domain.ToUpper() + @"\" + username;
+
+                crmUser.Attributes["domainname"] = fullDomainName;
+            }
+
+            if (ADuser.Properties["givenname"].Value != null)
+            {
+                crmUser.Attributes["firstname"] = ADuser.Properties["givenname"].Value.ToString();
+            }
+
+            if (ADuser.Properties["sn"].Value != null)
+            {
+                crmUser.Attributes["lastname"] = ADuser.Properties["sn"].Value.ToString();
+            }
+
+            if (ADuser.Properties["title"].Value != null)
+            {
+                crmUser.Attributes["title"] = ADuser.Properties["title"].Value.ToString();
+            }
+
+            if (ADuser.Properties["l"].Value != null)
+            {
+                crmUser.Attributes["address1_city"] = ADuser.Properties["l"].Value.ToString();
+            }
+
+            if (ADuser.Properties["streetAddress"].Value != null)
+            {
+                crmUser.Attributes["address1_line1"] = ADuser.Properties["streetAddress"].Value.ToString();
+            }
+
+            if (ADuser.Properties["postalCode"].Value != null)
+            {
+                crmUser.Attributes["address1_postalcode"] = ADuser.Properties["postalCode"].Value.ToString();
+            }
+
+            if (ADuser.Properties["st"].Value != null)
+            {
+                crmUser.Attributes["address1_stateorprovince"] = ADuser.Properties["st"].Value.ToString();
+            }
+
+            if (ADuser.Properties["co"].Value != null)
+            {
+                crmUser.Attributes["address1_country"] = ADuser.Properties["co"].Value.ToString();
+            }
+
+            if (ADuser.Properties["telephoneNumber"].Value != null)
+            {
+                crmUser.Attributes["address1_telephone1"] = ADuser.Properties["telephoneNumber"].Value.ToString();
+            }
+
+            if (ADuser.Properties["mobile"].Value != null)
+            {
+                crmUser.Attributes["mobilephone"] = ADuser.Properties["mobile"].Value.ToString();
+            }
+
+            if (ADuser.Properties["facsimileTelephoneNumber"].Value != null)
+            {
+                crmUser.Attributes["address1_fax"] = ADuser.Properties["facsimileTelephoneNumber"].Value.ToString();
+            }
+
+            crmUser.Attributes["a24_adsync"] = true;   //check if he receive bool or string              
+
+
+            return crmUser;
+        }
+
+        public void UpdateFromDataModel(DirectoryEntry ADuser, Entity CRMuser)
+        {
+            List<DirectoryEntry> userGroups = new List<DirectoryEntry>();                 //Show all users groups
+            object obGroups = ADuser.Invoke("Groups");
+            foreach (object ob in (IEnumerable)obGroups)
+            {
+                // Create object for each group.
+                DirectoryEntry obGpEntry = new DirectoryEntry(ob);
+                userGroups.Add(obGpEntry);
+            }
+
+            //////PART FOR READING USER ROLES:
+            List<String> listOfUserRoles = new List<String>();
+            QueryExpression queryExpression = new QueryExpression();
+            queryExpression.EntityName = "role"; //role entity name
+            ColumnSet cols = new ColumnSet();
+            cols.AddColumn("name"); //We only need role name
+            queryExpression.ColumnSet = cols;
+            ConditionExpression ce = new ConditionExpression();
+            ce.AttributeName = "systemuserid";
+            ce.Operator = ConditionOperator.Equal;
+            ce.Values.Add(CRMuser.Id);
+            //system roles
+            LinkEntity lnkEntityRole = new LinkEntity();
+            lnkEntityRole.LinkFromAttributeName = "roleid";
+            lnkEntityRole.LinkFromEntityName = "role"; //FROM
+            lnkEntityRole.LinkToEntityName = "systemuserroles";
+            lnkEntityRole.LinkToAttributeName = "roleid";
+            //system users
+            LinkEntity lnkEntitySystemusers = new LinkEntity();
+            lnkEntitySystemusers.LinkFromEntityName = "systemuserroles";
+            lnkEntitySystemusers.LinkFromAttributeName = "systemuserid";
+            lnkEntitySystemusers.LinkToEntityName = "systemuser";
+            lnkEntitySystemusers.LinkToAttributeName = "systemuserid";
+            lnkEntitySystemusers.LinkCriteria = new FilterExpression();
+            lnkEntitySystemusers.LinkCriteria.Conditions.Add(ce);
+            lnkEntityRole.LinkEntities.Add(lnkEntitySystemusers);
+            queryExpression.LinkEntities.Add(lnkEntityRole);
+            EntityCollection entColRoles = _service.RetrieveMultiple(queryExpression);
+            if (entColRoles != null && entColRoles.Entities.Count > 0)
+            {
+                foreach (Entity entRole in entColRoles.Entities)
+                {
+                    listOfUserRoles.Add(entRole.Attributes["name"].ToString());
+                }
+            }
+
+            ////PART FOR READING USER TEAMS:
+            List<String> listOfUserTeams = new List<String>();
+            QueryExpression queryExpressionTeams = new QueryExpression();
+            queryExpressionTeams.EntityName = "team"; //role entity name
+            ColumnSet colsTeams = new ColumnSet();
+            colsTeams.AddColumn("name"); //We only need team name
+            queryExpressionTeams.ColumnSet = colsTeams;
+            ConditionExpression ceTeams = new ConditionExpression();
+            ceTeams.AttributeName = "systemuserid";
+            ceTeams.Operator = ConditionOperator.Equal;
+            ceTeams.Values.Add(CRMuser.Id);
+            //system roles
+            LinkEntity lnkEntityTeam = new LinkEntity();
+            lnkEntityTeam.LinkFromAttributeName = "teamid";
+            lnkEntityTeam.LinkFromEntityName = "team"; //FROM
+            lnkEntityTeam.LinkToEntityName = "teammembership";
+            lnkEntityTeam.LinkToAttributeName = "teamid";
+            //system users
+            LinkEntity lnkEntitySystemusersTeams = new LinkEntity();
+            lnkEntitySystemusersTeams.LinkFromEntityName = "teammembership";
+            lnkEntitySystemusersTeams.LinkFromAttributeName = "systemuserid";
+            lnkEntitySystemusersTeams.LinkToEntityName = "systemuser";
+            lnkEntitySystemusersTeams.LinkToAttributeName = "systemuserid";
+            lnkEntitySystemusersTeams.LinkCriteria = new FilterExpression();
+            lnkEntitySystemusersTeams.LinkCriteria.Conditions.Add(ceTeams);
+            lnkEntityTeam.LinkEntities.Add(lnkEntitySystemusersTeams);
+            queryExpressionTeams.LinkEntities.Add(lnkEntityTeam);
+            EntityCollection entColTeams = _service.RetrieveMultiple(queryExpressionTeams);
+            if (entColTeams != null && entColTeams.Entities.Count > 0)
+            {
+                foreach (Entity entTeam in entColTeams.Entities)
+                {
+                    listOfUserTeams.Add(entTeam.Attributes["name"].ToString());
+                }
+            }
+
+            foreach (var group in userGroups)
+            {
+                var CRMgroup = AD_GroupList.FirstOrDefault(x => x.GetAttributeValue<string>("a24_name").Equals(group.Properties["cn"].Value.ToString()));
+
+                if (CRMgroup != null)
+                {
+                    var valueListCrmSecurityObjectIdConn = AD_Groups__CrmsSecurityObject.Where(x => x.GetAttributeValue<Guid>("a24_adgroupid").ToString()
+                                            .Equals(CRMgroup.GetAttributeValue<Guid>("a24_adgroupid").ToString()));
+
+                    foreach (var a24_valueListCrmSecurityObjectIdConn in valueListCrmSecurityObjectIdConn)
+                    {
+
+                        var crmSecurityObject = CRMsecurityObjectList.FirstOrDefault(x => x.GetAttributeValue<Guid>("a24_crmsecurityobjectid").ToString()
+                                                      .Equals(a24_valueListCrmSecurityObjectIdConn.GetAttributeValue<Guid>("a24_crmsecurityobjectid").ToString()));
+
+                        string nameValue = crmSecurityObject.GetAttributeValue<string>("a24_name");
+                        OptionSetValue typeValue = crmSecurityObject.GetAttributeValue<OptionSetValue>("a24_type_opt");
+
+                        if (typeValue.Value == (int)(SecurityObjectType.SecurityRole))  //should be changed when model is changed with false -> role
+                        {
+                            if (AllRoles.Count > 0)
+                            {
+                                var role = AllRoles.FirstOrDefault(x => x.GetAttributeValue<string>("name").Equals(nameValue) &&
+                                          x.GetAttributeValue<EntityReference>("businessunitid").Id.Equals(CRMuser.GetAttributeValue<EntityReference>("businessunitid").Id));  //ToLower() in case if its not case sensitive
+
+                                if (role != null)
+                                {
+                                    string valueRole = role.GetAttributeValue<string>("name");
+                                    if (nameValue.Equals(valueRole) && !listOfUserRoles.Contains(valueRole))
+                                    {
+                                        try
+                                        {
+                                            _service.Associate("systemuser", CRMuser.Id,
+                                                new Relationship("systemuserroles_association"),
+                                                new EntityReferenceCollection() { new EntityReference("role", role.Id) });
+                                        }
+                                        catch (Exception ex) { }
+                                    }
+                                }
+                            }
+                        }
+                        else if (typeValue.Value == (int)(SecurityObjectType.Team))  //should be changed when model is changed with false -> team
+                        {
+                            if (AllTeams.Count > 0)
+                            {
+                                var team = AllTeams.FirstOrDefault(x => x.GetAttributeValue<string>("name").Equals(nameValue));   //ToLower() in case if its not case sensitive
+
+                                if (team != null)
+                                {
+                                    string valueTeam = team.GetAttributeValue<string>("name");
+                                    if (nameValue.Equals(valueTeam) && !listOfUserTeams.Contains(valueTeam))
+                                    {
+                                        try
+                                        {
+                                            _service.Associate("systemuser", CRMuser.Id,
+                                                 new Relationship("teammembership_association"),
+                                                 new EntityReferenceCollection() { new EntityReference("team", team.Id) });
+                                        }
+                                        catch (Exception ex) { }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        public void CompareOUandBU(DirectoryEntry ADuser, Entity CRMuser)
+        {
+            string distinguishedName = ADuser.Properties["distinguishedName"].Value.ToString();
+            string[] words = distinguishedName.Split(new[] { ",OU=" }, StringSplitOptions.None);
+
+            string OU = words[1];
+
+            EntityReference crmBusinessUnit = CRMuser.GetAttributeValue<EntityReference>("businessunitid");
+
+            if (!OU.Equals(crmBusinessUnit.Name))
+            {
+                //Do the logging part that UO name is not the same as BU name 
+            }
+        }
     }
 }

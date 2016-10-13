@@ -20,9 +20,14 @@ namespace AD_CRM
         private static String password;
         private static bool syncFirst;
         private static String groupsFromXml;
+
         private static List<DirectoryEntry> allUsersListAD = new List<DirectoryEntry>();
-        private static List<Entity> allUsersListCRM = new List<Entity>();
-        private static List<byte[]> listIdsInByte;
+        private static List<byte[]> listUserIdsInByte;
+
+        private static List<DirectoryEntry> allGroupListAD = new List<DirectoryEntry>();
+        private static List<byte[]> listGroupIdsInByte;
+
+        private static CrmDataForAd CRM;
 
         static void Main(string[] args)
         {
@@ -58,114 +63,55 @@ namespace AD_CRM
                 for (int i = 0; i < results.Count; i++)
                 {
                     DirectoryEntry de = results[i].GetDirectoryEntry();
-                    var members = (IEnumerable)de.Invoke("members");// Invoke("members");
+                    allGroupListAD.Add(de);
 
+                    var members = (IEnumerable)de.Invoke("members");// Invoke("members");
                     foreach (object member in members)
                     {
                         DirectoryEntry user = new DirectoryEntry(member);
                         allUsersListAD.Add(user);
                     }
                 }
-                ////////////////////////////////
-                //if (allUsersListAD.Count > 0)
-                //{
-                //    var user = allUsersListAD[0];
+                //Get list of objectGUIDs from relevant users and populate the list with those values converted to Byte[]                      //ADD TO FUNCTION
+                listUserIdsInByte = getByteArrays(allUsersListAD);
 
-                //    foreach (string propName in user.Properties.PropertyNames)    //Show all users properties
-                //    {
-                //        if (user.Properties[propName].Value != null)
-                //        {
-                //            Console.WriteLine(propName + " = " + user.Properties[propName].Value.ToString());
-                //        }
-                //        else
-                //        {
-                //            Console.WriteLine(propName + " = NULL");
-                //        }
-                //    }
-                //}
-                //Console.ReadKey();
+                //Get list of objectGUIDs from relevant groups and populate the list with those values converted to Byte[]
+                listGroupIdsInByte = getByteArrays(allGroupListAD);
 
-                //Get list of objectGUIDs from relevant users and populate the list with its values converted to Byte[]
-                List<PropertyValueCollection> ids = allUsersListAD.Select(x => x.Properties["objectGUID"]).ToList();
-                listIdsInByte = new List<byte[]>();
-                byte[] byteTest;
 
-                foreach (var item in ids)
-                {
-                    byteTest = (System.Byte[])item.Value;
-                    //int i = BitConverter.ToInt32(byteTest, 0);
-                    listIdsInByte.Add(byteTest);
-                }
-
-                CrmDataForAd CRM = new CrmDataForAd(username, password);
-                //CRM.DataForAdSync();
-
+                CRM = new CrmDataForAd(username, password);
 
                 if (syncFirst)
                 {
-                    foreach (var userAD in allUsersListAD)
+                    foreach (var ADuser in allUsersListAD)
                     {
-                        string fullAccountName = @"A24XRMDOMAIN\" + userAD.Properties["sAMAccountName"].Value.ToString();
-                        Entity crmUser = CRM.GetUserFromCRM(fullAccountName);
+                        Entity crmUser = CRM.GetUserFromCRM(ADuser);
                         if (crmUser != null)
                         {
                             // Add condition in case if flag allows this for RELEVANT DATA
                             //TODO try catch for no values also and for CRM access
-                            string givenname = userAD.Properties["givenname"].Value.ToString();
-                            string l= userAD.Properties["l"].Value.ToString();
+                            //var overwriteactivedirectorysync = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("new_overwriteactivedirectorysync"));
 
+                            if (crmUser.Attributes["a24_overwriteadsync"].ToString().Equals("false"))
+                            {
+                                Entity synchronizedUser = CRM.Synchronization(ADuser, crmUser);
+                                CRM.UpdateFromDataModel(ADuser, crmUser);
+                                CRM.UpdateCrmUser(synchronizedUser);
+                            }
 
-                            var firstname = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("firstname"));
-                            crmUser.Attributes[firstname.Key] = userAD.Properties["givenname"].Value.ToString();
-
-                            var lastname = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("lastname"));
-                            crmUser.Attributes[lastname.Key] = userAD.Properties["sn"].Value.ToString();
-
-                            var title = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("title"));
-                            crmUser.Attributes[title.Key] = userAD.Properties["title"].Value.ToString();                                              
-
-                            var address1_line1 = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_line1"));
-                            crmUser.Attributes[address1_line1.Key] = userAD.Properties["streetAddress"].Value.ToString();
-
-                            var address1_city = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_city"));
-                            crmUser.Attributes[address1_city.Key] = userAD.Properties["l"].Value.ToString();
-
-                            var address1_postalcode = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_postalcode"));
-                            crmUser.Attributes[address1_postalcode.Key] = userAD.Properties["postalCode"].Value.ToString();
-
-                            var address1_stateorprovince = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_stateorprovince"));
-                            crmUser.Attributes[address1_stateorprovince.Key] = userAD.Properties["st"].Value.ToString();
-
-                            var address1_country = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_country"));
-                            crmUser.Attributes[address1_country.Key] = userAD.Properties["co"].Value.ToString();
-
-
-                            var address1_telephone1 = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_telephone1"));
-                            crmUser.Attributes[address1_telephone1.Key] = userAD.Properties["telephoneNumber"].Value.ToString();
-
-                            var mobilephone = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("mobilephone"));
-                            crmUser.Attributes[mobilephone.Key] = userAD.Properties["mobile"].Value.ToString();
-
-                            var address1_fax = crmUser.Attributes.FirstOrDefault(x => x.Key.Equals("address1_fax"));
-                            crmUser.Attributes[address1_fax.Key] = userAD.Properties["facsimileTelephoneNumber"].Value.ToString();
-                           
-
-                            //CRM.UpdateCrmEntity(crmUser);
-                            allUsersListCRM.Add(crmUser);
+                            CRM.CompareOUandBU(ADuser, crmUser);
                         }
+                        else
+                        {
+                            try
+                            {
+                                CRM.CreateNewCRMUser(ADuser);
+                            }
+                            catch { }
+                        }
+
                     }
-                }               
-
-
-                //if (allUsersListCRM.Count > 0)
-                //{
-                //    var user = allUsersListCRM[0];
-
-                //    foreach (var propName in user.Attributes)    //Show all users properties
-                //    {
-                //        Console.WriteLine(propName.Key + " = " + propName.Value);
-                //    }
-                //}
+                }
 
                 //Create Ldap connection for notifiers and remove domainName from user for loging
                 username = username.Substring(username.IndexOf(@"\") + 1);
@@ -200,23 +146,185 @@ namespace AD_CRM
             if ((e.Result.DistinguishedName).Contains("OU=AD2CRM,OU=ComData,OU=Extern,OU=A24-UsersAndGroups,DC=a24xrmdomain,DC=info"))
             {
                 object[] objectGuid = e.Result.Attributes["objectguid"].GetValues(typeof(Byte[]));
-                byte[] byteTest2 = (System.Byte[])objectGuid[0];
-                //string strTemp = BitConverter.ToString(byteTest2);
+                byte[] byteTest = (System.Byte[])objectGuid[0];
 
-                //if (listIdsInByte[0].SequenceEqual(byteTest2))
-                bool contains = listIdsInByte.Any(x => x.SequenceEqual(byteTest2));
+
+                bool contains = listUserIdsInByte.Any(x => x.SequenceEqual(byteTest));
                 if (contains)
                 {
-                    DirectoryEntry directoryEntry = new DirectoryEntry("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, username, password);
-                    Console.WriteLine(e.Result.DistinguishedName + "-----------------------------");
+                    DirectoryEntry ADuser = new DirectoryEntry("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, username, password);
+                    Console.WriteLine(e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
 
+                    Entity crmUser = CRM.GetUserFromCRM(ADuser);
+                    if (crmUser != null)
+                    {
+                        // Add condition in case if flag allows this for RELEVANT DATA and change prefix publisher in CRM to a24-need help
+                        //TODO try catch for no values also and for CRM access                       
+
+                        if (crmUser.Attributes["a24_overwriteadsync"].ToString().Equals("false"))
+                        {
+                            Entity synchronizedUser = CRM.Synchronization(ADuser, crmUser);
+                            CRM.UpdateCrmUser(synchronizedUser);
+                        }
+                    }
+                    //User active or deactivated
+                    int flags = (int)ADuser.Properties["userAccountControl"].Value;
+                    var active = !Convert.ToBoolean(flags & 0x0002);
+                    if (active == false) Console.WriteLine("User deactivated"); //Logging part
+
+                    //Part to check if user has changed his OU
+                    foreach (var item in allUsersListAD)
+                    {
+                        byte[] tempBute = ObjectGuid(item.Properties["objectguid"].Value);
+                        if (tempBute.SequenceEqual(byteTest))
+                        {
+                            if (!item.Properties["distinguishedName"].Value.ToString().Equals(ADuser.Properties["distinguishedName"].Value.ToString())) Console.WriteLine("User has changed his OU"); break;
+                        }
+                    }
 
                     Console.WriteLine();
                     Console.WriteLine("====================================================================================================================================");
                     Console.WriteLine();
                     //Console.ReadKey();
                 }
+
+                bool containsGroups = listGroupIdsInByte.Any(x => x.SequenceEqual(byteTest));
+                if (containsGroups)
+                {
+                    DirectoryEntry groupAD = new DirectoryEntry("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, username, password);
+                    Console.WriteLine(e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
+
+                    DirectoryEntry previousStateGroup = new DirectoryEntry(); // = allGroupListAD.FirstOrDefault(x=>x.Properties["objectguid"].Value.Equals(objectGuid[0]));
+
+                    foreach (var item in allGroupListAD)  //Can be done and with /*listIdsInByteGroups*/ but than you have to read Entity
+                    {
+                        byte[] byteTemp = ObjectGuid(item.Properties["objectguid"].Value);
+                        if (byteTemp.SequenceEqual(byteTest)) previousStateGroup = item;
+                    }
+
+                    List<DirectoryEntry> oldGroupUsersList = new List<DirectoryEntry>();
+                    List<DirectoryEntry> newGroupUsersList = new List<DirectoryEntry>();
+
+                    var membersOld = (IEnumerable)previousStateGroup.Invoke("members");// Invoke("members");
+                    foreach (object member in membersOld)
+                    {
+                        DirectoryEntry user = new DirectoryEntry(member);
+                        oldGroupUsersList.Add(user);
+                    }
+
+                    var membersNew = (IEnumerable)groupAD.Invoke("members");// Invoke("members");
+                    foreach (object member in membersNew)
+                    {
+                        DirectoryEntry user = new DirectoryEntry(member);
+                        newGroupUsersList.Add(user);
+                    }
+
+                    List<DirectoryEntry> UsersAddedToGroups = new List<DirectoryEntry>(); //Users that are Added to Group
+                    List<DirectoryEntry> UsersRemovedFromGroup = new List<DirectoryEntry>(); //Users that are Removed to Group
+
+                    //if (newGroupUsersList.Count >= oldGroupUsersList.Count)                             //    NEED TO CHECK LOGIC
+                    {
+                        foreach (var newUser in newGroupUsersList)
+                        {
+                            foreach (var oldUser in oldGroupUsersList)
+                            {
+                                byte[] newByteTest = ObjectGuid(newUser.Properties["objectguid"].Value);
+                                byte[] oldByteTest = ObjectGuid(oldUser.Properties["objectguid"].Value);
+
+                                if (newByteTest.SequenceEqual(oldByteTest)) continue;
+
+                                UsersAddedToGroups.Add(newUser);
+                            }
+                        }
+                    }
+                    //else if (newGroupUsersList.Count < oldGroupUsersList.Count)
+                    {
+                        foreach (var oldUser in oldGroupUsersList)
+                        {
+                            foreach (var newUser in newGroupUsersList)
+                            {
+                                byte[] newByteTest = ObjectGuid(newUser.Properties["objectguid"].Value);
+                                byte[] oldByteTest = ObjectGuid(oldUser.Properties["objectguid"].Value);
+
+                                if (newByteTest.SequenceEqual(oldByteTest)) continue;
+
+                                UsersRemovedFromGroup.Add(oldUser);
+                            }
+                        }
+                    }
+                    //Update old List of groups with group that have new users 
+                    byte[] byteTempUpdate = ObjectGuid(groupAD.Properties["objectguid"].Value);
+
+                    foreach (var item in allGroupListAD)
+                    {
+                        byte[] byteTempSearch = ObjectGuid(item.Properties["objectguid"].Value);
+
+                        if (byteTempSearch.SequenceEqual(byteTempUpdate))
+                        {
+                            allGroupListAD.Remove(item);
+                            allGroupListAD.Add(groupAD);
+                            break;
+                        }
+                    }
+
+                    //Go through Added users and add Roles/Teams from our DataModel to them
+                    foreach (var ADuser in UsersAddedToGroups)
+                    {
+                        Entity crmUser = CRM.GetUserFromCRM(ADuser);
+                        if (crmUser != null)
+                        {
+                            if (crmUser.Attributes["a24_overwriteadsync"].ToString().Equals("false"))
+                            {
+                                Entity synchronizedUser = CRM.Synchronization(ADuser, crmUser);
+                                CRM.UpdateFromDataModel(ADuser, crmUser);
+                                CRM.UpdateCrmUser(synchronizedUser);
+                            }
+
+                            CRM.CompareOUandBU(ADuser, crmUser);
+                        }
+                        else
+                        {
+                            CRM.CreateNewCRMUser(ADuser);
+                        }
+
+                        //Add new user in list of all users
+                        allUsersListAD.Add(ADuser);
+                    }
+
+                    foreach (var ADuser in UsersRemovedFromGroup)
+                    {
+                        allUsersListAD.Remove(ADuser);           //Check once again what will happen in case that user is not in the list, but he should be alwaays there
+                    }
+
+
+
+                    listUserIdsInByte = getByteArrays(allUsersListAD);
+
+                }
             }
+        }
+
+        static Byte[] ObjectGuid(object o)
+        {
+            byte[] byteTempUpdate = (System.Byte[])o;
+            return byteTempUpdate;
+        }
+
+        static List<byte[]> getByteArrays(List<DirectoryEntry> allEntities)
+        {
+            List<PropertyValueCollection> ids = allEntities.Select(x => x.Properties["objectGUID"]).ToList();
+
+
+            List<byte[]> temp = new List<byte[]>();
+            byte[] byteTest;
+
+            foreach (var item in ids)
+            {
+                byteTest = (byte[])item.Value;
+                temp.Add(byteTest);
+            }
+
+            return temp;
         }
     }
 }

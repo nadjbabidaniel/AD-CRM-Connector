@@ -1,6 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <settings>
-  <activedirectory ldap="XRMSERVER02.a24xrmdomain.info" username="A24XRMDOMAIN\Danijel.Nadjbabi" password="Por4Xae3" syncFirst="true"/>
+  <activedirectory ldap="XRMSERVER02.a24xrmdomain.info" username="A24XRMDOMAIN\Andrea.Borbelj" password="Nue5Gbe9" syncFirst="true"/>
   <organizations>
     <!--<organization url="https://adtocrmconnector.dev.anywhere24.com/" org="adtocrmconnector" username="username" password="password" adgroup="comData2" />-->
     <organization url="https://adtocrmconnector.dev.anywhere24.com/" org="adtocrmconnector" username="username" password="password" adgroup="sales2" />

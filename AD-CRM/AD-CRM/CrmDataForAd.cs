@@ -30,16 +30,18 @@ namespace AD_CRM
     private static string _soapOrgServiceUri = "https://adtocrmconnector.dev.anywhere24.com/XRMServices/2011/Organization.svc";
     private OrganizationServiceContext _orgSvcContext;
     private IOrganizationService _service;
+    private string _userDomain;
 
     #endregion fields
 
     #region constructor
 
-    public CRMDataForAD (string user, string pass)
+    public CRMDataForAD (string user, string pass, string domain)
     {
       var credentials = new ClientCredentials ();
       credentials.UserName.UserName = user;
       credentials.UserName.Password = pass;
+      _userDomain = domain;
 
       Uri serviceUri = new Uri (_soapOrgServiceUri);
       var proxy = new OrganizationServiceProxy (serviceUri, null, credentials, null);
@@ -92,7 +94,7 @@ namespace AD_CRM
       Entity CRMuser = createNewCrmSystemuUser (businesID);
       Synchronization (adUser, CRMuser);
 
-      string fullAccountName = @"A24XRMDOMAIN\" + adUser.Properties["sAMAccountName"].Value.ToString ();
+      string fullAccountName = _userDomain + adUser.Properties["sAMAccountName"].Value.ToString ();
       var userCrm = (from userTemp in _orgSvcContext.CreateQuery ("systemuser")
                      where userTemp.GetAttributeValue<String> ("domainname").Equals (fullAccountName)
                      select userTemp).FirstOrDefault ();
@@ -113,7 +115,7 @@ namespace AD_CRM
 
     public Entity GetUserFromCRM (DirectoryEntry adUser)
     {
-      string fullAccountName = @"A24XRMDOMAIN\" + adUser.Properties["sAMAccountName"].Value.ToString ();   //Hard coded  @"A24XRMDOMAIN\"  !
+      string fullAccountName = _userDomain + adUser.Properties["sAMAccountName"].Value.ToString ();   
 
       Entity CRMuser = (from user in _orgSvcContext.CreateQuery ("systemuser")
                         where user.GetAttributeValue<String> ("domainname").Equals (fullAccountName)

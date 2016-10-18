@@ -14,10 +14,12 @@ namespace AD_CRM
   {
     #region fields
 
-    private static String _username;
-    private static String _password;
+    private static string _username;
+    private static string _password;
     private static bool _syncFirst;
-    private static String _groupsFromXml;
+    private static string _groupsFromXml;
+    private static string _ldapPath;
+    private static string _domain;
 
     private static List<DirectoryEntry> _allRelevantUsersAD = new List<DirectoryEntry> ();
     private static List<DirectoryEntry> _allRelevantGroupsAD = new List<DirectoryEntry> ();
@@ -39,16 +41,18 @@ namespace AD_CRM
 
       XmlNode activedirectory = doc.SelectSingleNode ("/settings/activedirectory");
       string ldapConn = activedirectory.Attributes["ldap"].Value;
+      _ldapPath = "LDAP://" + ldapConn;
       _username = activedirectory.Attributes["username"].Value;
       _password = activedirectory.Attributes["password"].Value;
+      _domain = _username.Substring (0, _username.LastIndexOf (@"\") + 1);
+      
       _syncFirst = Boolean.Parse (activedirectory.Attributes["syncFirst"].Value);   //always true or false
 
       XmlNodeList xmlADGroupsNodeList = doc.SelectNodes ("/settings/organizations/organization/@adgroup");
 
       try
-      {
-        string ldapPath = "LDAP://" + ldapConn;
-        DirectoryEntry directoryEntry = new DirectoryEntry (ldapPath, _username, _password);
+      {       
+        DirectoryEntry directoryEntry = new DirectoryEntry (_ldapPath, _username, _password);
 
         //// Create search for all groups from config file
         DirectorySearcher search = new DirectorySearcher (directoryEntry);
@@ -78,16 +82,13 @@ namespace AD_CRM
         //Get list of objectGUIDs from relevant groups and populate the list with those values converted to Byte[]
         _listGroupIdsInByte = getObjectGUID (_allRelevantGroupsAD);
 
-        _crm = new CRMDataForAD (_username, _password);
+        _crm = new CRMDataForAD (_username, _password, _domain);
        
         if (_syncFirst) // if _syncFirst is true, service will first sync AD data with CRM data and then listen to changes
         {
           syncDataFirst();
-        }
-        else
-        {
-          listenToChangesFirst (ldapConn);
         }       
+          listenToChanges (ldapConn);             
       }
       catch (Exception e)
       {
@@ -109,8 +110,8 @@ namespace AD_CRM
 
         bool contains = _listUserIdsInByte.Any (x => x.SequenceEqual (bytefromGuid));
         if (contains)
-        {
-          DirectoryEntry adUser = new DirectoryEntry ("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, _username, _password);
+        {         
+          DirectoryEntry adUser = new DirectoryEntry (_ldapPath + "/" + e.Result.DistinguishedName, _username, _password);
           Console.WriteLine (e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
 
           try
@@ -139,7 +140,7 @@ namespace AD_CRM
         bool containsGroups = _listGroupIdsInByte.Any (x => x.SequenceEqual (bytefromGuid));
         if (containsGroups)
         {
-          DirectoryEntry adGroup = new DirectoryEntry ("LDAP://XRMSERVER02.a24xrmdomain.info/" + e.Result.DistinguishedName, _username, _password);
+          DirectoryEntry adGroup = new DirectoryEntry (_ldapPath + "/" + e.Result.DistinguishedName, _username, _password);
           Console.WriteLine (e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
 
           checkUserAddedRemovedFromADGroup (adGroup, bytefromGuid);
@@ -200,7 +201,7 @@ namespace AD_CRM
           }
         }
 
-    private static void listenToChangesFirst (string ldapConn)
+    private static void listenToChanges(string ldapConn)
     {
       //Create Ldap connection for notifiers and remove domainName from user for loging
       _username = _username.Substring (_username.IndexOf (@"\") + 1);
@@ -240,24 +241,24 @@ namespace AD_CRM
 
     private static Byte[] objectGuid (object o)
     {
-      byte[] byteTempUpdate = (System.Byte[]) o;
-      return byteTempUpdate;
+      byte[] byteGuid = (Byte[]) o;
+      return byteGuid;
     }
 
     private static List<byte[]> getObjectGUID (List<DirectoryEntry> allEntities)
     {
       List<PropertyValueCollection> ids = allEntities.Select (x => x.Properties["objectGUID"]).ToList ();
 
-      List<byte[]> idList = new List<byte[]> ();
-      byte[] bytesfromId;
+      List<byte[]> guidList = new List<byte[]> ();
+      byte[] bytesfromguid;
 
       foreach (var item in ids)
       {
-        bytesfromId = (byte[]) item.Value;
-        idList.Add (bytesfromId);
+        bytesfromguid = (byte[]) item.Value;
+        guidList.Add (bytesfromguid);
       }
 
-      return idList;
+      return guidList;
     }
 
     private static void checkUserOUChange (byte[] bytefromGuid, DirectoryEntry adUser)
@@ -348,13 +349,13 @@ namespace AD_CRM
             }
           }
           //Update old List of groups with group that has new users
-          byte[] byteTempUpdate = objectGuid (adGroup.Properties["objectguid"].Value);
+          byte[] guidAdGroup = objectGuid (adGroup.Properties["objectguid"].Value);
 
           foreach (var item in _allRelevantGroupsAD)
           {
-            byte[] byteTempSearch = objectGuid (item.Properties["objectguid"].Value);
+            byte[] guidAllRelevantAdGroup = objectGuid (item.Properties["objectguid"].Value);
 
-            if (byteTempSearch.SequenceEqual (byteTempUpdate))
+            if (guidAllRelevantAdGroup.SequenceEqual (guidAdGroup))
             {
               _allRelevantGroupsAD.Remove (item);
               _allRelevantGroupsAD.Add (adGroup);

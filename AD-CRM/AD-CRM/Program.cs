@@ -108,49 +108,46 @@ namespace AD_CRM
 
         private static void notifier_ObjectChanged(object sender, ObjectChangedEventArgs e)
         {
-            if ((e.Result.DistinguishedName).Contains("OU=AD2CRM,OU=ComData,OU=Extern,OU=A24-UsersAndGroups,DC=a24xrmdomain,DC=info")) //Will be removed, filter for now only users and groups from our AD2CRM OU
+            Entity crmuser = null;
+            object[] objectGuid = e.Result.Attributes["objectguid"].GetValues(typeof(Byte[]));
+            byte[] bytefromGuid = (System.Byte[])objectGuid[0];
+
+            bool contains = _listUserIdsInByte.Any(x => x.SequenceEqual(bytefromGuid));
+            if (contains)
             {
-                Entity crmuser = null;
-                object[] objectGuid = e.Result.Attributes["objectguid"].GetValues(typeof(Byte[]));
-                byte[] bytefromGuid = (System.Byte[])objectGuid[0];
+                DirectoryEntry adUser = new DirectoryEntry(_ldapPath + "/" + e.Result.DistinguishedName, _username, _password);
+                Console.WriteLine(e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
 
-                bool contains = _listUserIdsInByte.Any(x => x.SequenceEqual(bytefromGuid));
-                if (contains)
+                try
                 {
-                    DirectoryEntry adUser = new DirectoryEntry(_ldapPath + "/" + e.Result.DistinguishedName, _username, _password);
-                    Console.WriteLine(e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
-
-                    try
-                    {
-                        crmuser = _crm.GetUserFromCRM(adUser);
-                    }
-                    catch (Exception ex)
-                    {
-                        System.Diagnostics.Debug.WriteLine(ex.Message);
-                        Console.WriteLine(ex.Message);
-                    }
-                    if (crmuser != null)
-                    {
-                        syncAndUpdateUser(adUser, crmuser);
-                    }
-
-                    isUserActive(adUser);
-
-                    checkUserOUChange(bytefromGuid, adUser);
-
-                    Console.WriteLine();
-                    Console.WriteLine("====================================================================================================================================");
-                    Console.WriteLine();
+                    crmuser = _crm.GetUserFromCRM(adUser);
+                }
+                catch (Exception ex)
+                {
+                    System.Diagnostics.Debug.WriteLine(ex.Message);
+                    Console.WriteLine(ex.Message);
+                }
+                if (crmuser != null)
+                {
+                    syncAndUpdateUser(adUser, crmuser);
                 }
 
-                bool containsGroups = _listGroupIdsInByte.Any(x => x.SequenceEqual(bytefromGuid));
-                if (containsGroups)
-                {
-                    DirectoryEntry adGroup = new DirectoryEntry(_ldapPath + "/" + e.Result.DistinguishedName, _username, _password);
-                    Console.WriteLine(e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
+                isUserActive(adUser);
 
-                    checkUserAddedRemovedFromADGroup(adGroup, bytefromGuid);
-                }
+                checkUserOUChange(bytefromGuid, adUser);
+
+                Console.WriteLine();
+                Console.WriteLine("====================================================================================================================================");
+                Console.WriteLine();
+            }
+
+            bool containsGroups = _listGroupIdsInByte.Any(x => x.SequenceEqual(bytefromGuid));
+            if (containsGroups)
+            {
+                DirectoryEntry adGroup = new DirectoryEntry(_ldapPath + "/" + e.Result.DistinguishedName, _username, _password);
+                Console.WriteLine(e.Result.DistinguishedName + "------------------------------------------------------------------------------------------------------");
+
+                checkUserAddedRemovedFromADGroup(adGroup, bytefromGuid);
             }
         }
 
@@ -162,49 +159,46 @@ namespace AD_CRM
         {
             foreach (var adUser in _allRelevantUsersAD)
             {
-                if (adUser.Properties["givenname"].Value.ToString().Equals("Andrea"))
+                Entity crmUser = null;
+                try
                 {
-                    Entity crmUser = null;
+                    crmUser = _crm.GetUserFromCRM(adUser);
+                }
+                catch (Exception e)
+                {
+                    System.Diagnostics.Debug.WriteLine(e.Message);
+                    Console.WriteLine(e.Message);
+                }
+                if (crmUser != null)
+                {
+                    //  if a24_overwriteadsync_bit is set to FALSE, CRM data will be synced with AD relevant data and readonly. If TRUE, data will be disassociated from AD, and editable
+                    if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit").Equals(null))
+                    {
+                        crmUser.Attributes["a24_overwriteadsync_bit"] = false; // set default value
+                    }
+                    if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit") == false)
+                    {
+                        Entity synchronizedUser = _crm.Synchronization(adUser, crmUser);
+                        _crm.UpdateFromDataModel(adUser, crmUser);
+                        _crm.UpdateCrmUser(crmUser);
+                    }
+                    else
+                    {
+                        crmUser.Attributes["a24_adsync_bit"] = false;
+                    }
+
+                    _crm.CompareOUandBU(adUser, crmUser);
+                }
+                else
+                {
                     try
                     {
-                        crmUser = _crm.GetUserFromCRM(adUser);
+                        _crm.CreateNewCRMUser(adUser);
                     }
                     catch (Exception e)
                     {
                         System.Diagnostics.Debug.WriteLine(e.Message);
                         Console.WriteLine(e.Message);
-                    }
-                    if (crmUser != null)
-                    {
-                        //  if a24_overwriteadsync_bit is set to FALSE, CRM data will be synced with AD relevant data and readonly. If TRUE, data will be disassociated from AD, and editable
-                        if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit").Equals(null))
-                        {
-                            crmUser.Attributes["a24_overwriteadsync_bit"] = false; // set default value
-                        }
-                        if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit") == false)
-                        {
-                            Entity synchronizedUser = _crm.Synchronization(adUser, crmUser);
-                            _crm.UpdateFromDataModel(adUser, crmUser);
-                            _crm.UpdateCrmUser(crmUser);
-                        }
-                        else
-                        {
-                            crmUser.Attributes["a24_adsync_bit"] = false;
-                        }
-
-                        _crm.CompareOUandBU(adUser, crmUser);
-                    }
-                    else
-                    {
-                        try
-                        {
-                            _crm.CreateNewCRMUser(adUser);
-                        }
-                        catch (Exception e)
-                        {
-                            System.Diagnostics.Debug.WriteLine(e.Message);
-                            Console.WriteLine(e.Message);
-                        }
                     }
                 }
             }
@@ -403,7 +397,7 @@ namespace AD_CRM
             }
 
             foreach (var ADuser in usersRemovedFromGroup)      //Need to check in case if he is relevant for some other relevant group !!!
-            {                 
+            {
                 _allRelevantUsersAD.Remove(_allRelevantUsersAD.FirstOrDefault(x => x.Guid == ADuser.Guid)); //Check once again what will happen in case that user is not in the list, but he should be alwaays there
             }
 

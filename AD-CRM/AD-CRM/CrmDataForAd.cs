@@ -77,7 +77,7 @@ namespace AD_CRM
           string domain = adUser.Properties["distinguishedName"].Value.ToString ();
           string[] splitDomain = domain.Split (new[] { ",DC=" }, StringSplitOptions.None);
           string DC = splitDomain[1] + @"\";
-            string fullAccountName = DC + adUser.Properties["sAMAccountName"].Value.ToString ();
+            string fullAccountName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value.ToString ();
             var userExistInCrm = (from userTemp in _orgSvcContext.CreateQuery("systemuser")
                            where userTemp.GetAttributeValue<String>("domainname").Equals(fullAccountName)
                            select userTemp).FirstOrDefault();
@@ -120,7 +120,7 @@ namespace AD_CRM
             string domain = adUser.Properties["distinguishedName"].Value.ToString ();
             string[] splitDomain = domain.Split (new[] { ",DC=" }, StringSplitOptions.None);
             string DC = splitDomain[1] + @"\";
-            string fullAccountName = DC + adUser.Properties["sAMAccountName"].Value.ToString ();
+            string fullAccountName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value.ToString ();
 
             Entity CRMuser = (from user in _orgSvcContext.CreateQuery("systemuser")
                               where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
@@ -143,7 +143,7 @@ namespace AD_CRM
               string domain = adUser.Properties["distinguishedName"].Value.ToString ();
               string[] splitDomain = domain.Split (new[] { ",DC=" }, StringSplitOptions.None);
               string DC = splitDomain[1] + @"\";             
-              string fullDomainName = DC + adUser.Properties["sAMAccountName"].Value;
+              string fullDomainName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value;
 
                 crmUser.Attributes["domainname"] = fullDomainName;
             }

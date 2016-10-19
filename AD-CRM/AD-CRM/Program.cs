@@ -19,7 +19,6 @@ namespace AD_CRM
         private static bool _syncFirst;
         private static string _groupsFromXml;
         private static string _ldapPath;
-        private static string _domain;
 
         private static List<DirectoryEntry> _allRelevantUsersAD = new List<DirectoryEntry>();
         private static List<DirectoryEntry> _allRelevantGroupsAD = new List<DirectoryEntry>();
@@ -44,7 +43,6 @@ namespace AD_CRM
             _ldapPath = "LDAP://" + ldapConn;
             _username = activedirectory.Attributes["username"].Value;
             _password = activedirectory.Attributes["password"].Value;
-            _domain = _username.Substring(0, _username.LastIndexOf(@"\") + 1);
 
             bool isSyncFirst;
             if (Boolean.TryParse(activedirectory.Attributes["syncFirst"].Value, out isSyncFirst))
@@ -90,7 +88,7 @@ namespace AD_CRM
                 //Get list of objectGUIDs from relevant groups and populate the list with those values converted to Byte[]
                 _listGroupIdsInByte = getObjectGUID(_allRelevantGroupsAD);
 
-                _crm = new CRMDataForAD(_username, _password, _domain);
+                _crm = new CRMDataForAD(_username, _password);
 
                 if (_syncFirst) // if _syncFirst is true, service will first sync AD data with CRM data and then listen to changes
                 {

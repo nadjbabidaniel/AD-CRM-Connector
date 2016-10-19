@@ -30,7 +30,7 @@ namespace AD_CRM
         private static string _soapOrgServiceUri = "https://adtocrmconnector.dev.anywhere24.com/XRMServices/2011/Organization.svc";
         private OrganizationServiceContext _orgSvcContext;
         private IOrganizationService _service;
-       
+
         #endregion fields
 
         #region constructor
@@ -74,13 +74,16 @@ namespace AD_CRM
 
         public void CreateNewCRMUser(DirectoryEntry adUser)
         {
-          string domain = adUser.Properties["distinguishedName"].Value.ToString ();
-          string[] splitDomain = domain.Split (new[] { ",DC=" }, StringSplitOptions.None);
-          string DC = splitDomain[1] + @"\";
-            string fullAccountName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value.ToString ();
-            var userExistInCrm = (from userTemp in _orgSvcContext.CreateQuery("systemuser")
-                           where userTemp.GetAttributeValue<String>("domainname").Equals(fullAccountName)
-                           select userTemp).FirstOrDefault();
+            //string domain = adUser.Properties["distinguishedName"].Value.ToString();                                         //move this part in GetUserFromCRM(DirectoryEntry adUser) function
+            //string[] splitDomain = domain.Split(new[] { ",DC=" }, StringSplitOptions.None);
+            //string DC = splitDomain[1] + @"\";
+            //string fullAccountName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value.ToString();
+            //var userExistInCrm = (from userTemp in _orgSvcContext.CreateQuery("systemuser")
+            //                      where userTemp.GetAttributeValue<String>("domainname").Equals(fullAccountName)
+            //                      select userTemp).FirstOrDefault();
+
+            var userExistInCrm = GetUserFromCRM(adUser);
+
             if (userExistInCrm == null)
             {
 
@@ -117,15 +120,33 @@ namespace AD_CRM
 
         public Entity GetUserFromCRM(DirectoryEntry adUser)
         {
-            string domain = adUser.Properties["distinguishedName"].Value.ToString ();
-            string[] splitDomain = domain.Split (new[] { ",DC=" }, StringSplitOptions.None);
+            string domain = adUser.Properties["distinguishedName"].Value.ToString();
+            string[] splitDomain = domain.Split(new[] { ",DC=" }, StringSplitOptions.None);
             string DC = splitDomain[1] + @"\";
-            string fullAccountName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value.ToString ();
+            string fullAccountName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value.ToString();
 
             Entity CRMuser = (from user in _orgSvcContext.CreateQuery("systemuser")
                               where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
                               select user).FirstOrDefault();
-            return CRMuser;
+
+            //part for finding user based on byte[] form ad user
+            object o = adUser.Properties["objectguid"].Value;
+            byte[] byteGuid = (Byte[])o;
+            string strGuidADuser = BitConverter.ToString(byteGuid);
+
+            Entity CRMuserFromGuid = (from user in _orgSvcContext.CreateQuery("systemuser")
+                              where user.GetAttributeValue<String>("a24_guid_fromAD").Equals(strGuidADuser)
+                              select user).FirstOrDefault();
+
+            //part for returning CRMuser or CRMuserFromGuidin thay should be equal, another check for that maybe?
+            if (CRMuserFromGuid != null)
+            {
+                return CRMuserFromGuid;
+            }
+            else
+            {
+                return CRMuser;
+            }
         }
 
         public Entity Synchronization(DirectoryEntry adUser, Entity crmUser)
@@ -138,12 +159,12 @@ namespace AD_CRM
             //    string[] domains = words[1].Split('.');
             //    string domain = domains[0];
 
-          if (adUser.Properties["distinguishedName"].Value != null)
+            if (adUser.Properties["distinguishedName"].Value != null)
             {
-              string domain = adUser.Properties["distinguishedName"].Value.ToString ();
-              string[] splitDomain = domain.Split (new[] { ",DC=" }, StringSplitOptions.None);
-              string DC = splitDomain[1] + @"\";             
-              string fullDomainName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value;
+                string domain = adUser.Properties["distinguishedName"].Value.ToString();
+                string[] splitDomain = domain.Split(new[] { ",DC=" }, StringSplitOptions.None);
+                string DC = splitDomain[1] + @"\";
+                string fullDomainName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value;
 
                 crmUser.Attributes["domainname"] = fullDomainName;
             }

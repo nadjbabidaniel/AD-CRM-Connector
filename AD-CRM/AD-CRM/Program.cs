@@ -157,49 +157,55 @@ namespace AD_CRM
 
         private static void syncDataFirst()
         {
+            List<string> noRepeatUsers = new List<string>();
             foreach (var adUser in _allRelevantUsersAD)
             {
-                Entity crmUser = null;
-                try
+                if (!(noRepeatUsers.Contains(BitConverter.ToString(objectGuid(adUser.Properties["objectguid"].Value)))))
                 {
-                    crmUser = _crm.GetUserFromCRM(adUser);
-                }
-                catch (Exception e)
-                {
-                    System.Diagnostics.Debug.WriteLine(e.Message);
-                    Console.WriteLine(e.Message);
-                }
-                if (crmUser != null)
-                {
-                    //  if a24_overwriteadsync_bit is set to FALSE, CRM data will be synced with AD relevant data and readonly. If TRUE, data will be disassociated from AD, and editable
-                    if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit").Equals(null))
-                    {
-                        crmUser.Attributes["a24_overwriteadsync_bit"] = false; // set default value
-                    }
-                    if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit") == false)
-                    {
-                        Entity synchronizedUser = _crm.Synchronization(adUser, crmUser);
-                        _crm.UpdateFromDataModel(adUser, crmUser);
-                        _crm.UpdateCrmUser(crmUser);
-                    }
-                    else
-                    {
-                        crmUser.Attributes["a24_adsync_bit"] = false;
-                    }
+                    noRepeatUsers.Add((BitConverter.ToString(objectGuid(adUser.Properties["objectguid"].Value))));
 
-                    _crm.CompareOUandBU(adUser, crmUser);
-                }
-                else
-                {
+                    Entity crmUser = null;
                     try
                     {
-                        _crm.CreateNewCRMUser(adUser);
+                        crmUser = _crm.GetUserFromCRM(adUser);
                     }
                     catch (Exception e)
                     {
                         System.Diagnostics.Debug.WriteLine(e.Message);
                         Console.WriteLine(e.Message);
                     }
+                    if (crmUser != null)
+                    {
+                        //  if a24_overwriteadsync_bit is set to FALSE, CRM data will be synced with AD relevant data and readonly. If TRUE, data will be disassociated from AD, and editable
+                        if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit").Equals(null))
+                        {
+                            crmUser.Attributes["a24_overwriteadsync_bit"] = false; // set default value
+                        }
+                        if (crmUser.GetAttributeValue<bool>("a24_overwriteadsync_bit") == false)
+                        {
+                            Entity synchronizedUser = _crm.Synchronization(adUser, crmUser);
+                            _crm.UpdateFromDataModel(adUser, crmUser);
+                            _crm.UpdateCrmUser(crmUser);
+                        }
+                        else
+                        {
+                            crmUser.Attributes["a24_adsync_bit"] = false;
+                        }
+
+                        _crm.CompareOUandBU(adUser, crmUser);
+                    }
+                    else
+                    {
+                        try
+                        {
+                            _crm.CreateNewCRMUser(adUser);
+                        }
+                        catch (Exception e)
+                        {
+                            System.Diagnostics.Debug.WriteLine(e.Message);
+                            Console.WriteLine(e.Message);
+                        }
+                    } 
                 }
             }
         }

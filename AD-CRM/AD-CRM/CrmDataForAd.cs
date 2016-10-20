@@ -82,9 +82,8 @@ namespace AD_CRM
             //                      where userTemp.GetAttributeValue<String>("domainname").Equals(fullAccountName)
             //                      select userTemp).FirstOrDefault();
 
-            var userExistInCrm = GetUserFromCRM(adUser);
-
-            if (userExistInCrm == null)
+            //var userExistInCrm = GetUserFromCRM(adUser);      //no need for this since this is second check, this function is already called before
+            //if (userExistInCrm == null)
             {
 
 
@@ -129,21 +128,21 @@ namespace AD_CRM
                               where user.GetAttributeValue<String>("domainname").Equals(fullAccountName)
                               select user).FirstOrDefault();
 
-            //part for finding user based on byte[] form ad user
-            object o = adUser.Properties["objectguid"].Value;
-            byte[] byteGuid = (Byte[])o;
-            string strGuidADuser = BitConverter.ToString(byteGuid);
+            ////part for finding user based on byte[] form ad user
+            //object o = adUser.Properties["objectguid"].Value;
+            //byte[] byteGuid = (Byte[])o;
+            //string strGuidADuser = BitConverter.ToString(byteGuid);
 
-            Entity CRMuserFromGuid = (from user in _orgSvcContext.CreateQuery("systemuser")
-                              where user.GetAttributeValue<String>("a24_guid_fromAD").Equals(strGuidADuser)
-                              select user).FirstOrDefault();
+            //Entity CRMuserFromGuid = (from user in _orgSvcContext.CreateQuery("systemuser")
+            //                  where user.GetAttributeValue<String>("a24_guid_fromAD").Equals(strGuidADuser)
+            //                  select user).FirstOrDefault();
 
-            //part for returning CRMuser or CRMuserFromGuidin thay should be equal, another check for that maybe?
-            if (CRMuserFromGuid != null)
-            {
-                return CRMuserFromGuid;
-            }
-            else
+            ////part for returning CRMuser or CRMuserFromGuidin thay should be equal, another check for that maybe?
+            //if (CRMuserFromGuid != null)
+            //{
+            //    return CRMuserFromGuid;
+            //}
+            //else
             {
                 return CRMuser;
             }
@@ -159,15 +158,15 @@ namespace AD_CRM
             //    string[] domains = words[1].Split('.');
             //    string domain = domains[0];
 
-            if (adUser.Properties["distinguishedName"].Value != null)
-            {
-                string domain = adUser.Properties["distinguishedName"].Value.ToString();
-                string[] splitDomain = domain.Split(new[] { ",DC=" }, StringSplitOptions.None);
-                string DC = splitDomain[1] + @"\";
-                string fullDomainName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value;
+            //if (adUser.Properties["distinguishedName"].Value != null)                     //no need if this is going to be unique
+            //{
+            //    string domain = adUser.Properties["distinguishedName"].Value.ToString();
+            //    string[] splitDomain = domain.Split(new[] { ",DC=" }, StringSplitOptions.None);
+            //    string DC = splitDomain[1] + @"\";
+            //    string fullDomainName = DC.ToUpper() + adUser.Properties["sAMAccountName"].Value;
 
-                crmUser.Attributes["domainname"] = fullDomainName;
-            }
+            //    crmUser.Attributes["domainname"] = fullDomainName;
+            //}
 
             if (adUser.Properties["givenname"].Value != null)
             {
